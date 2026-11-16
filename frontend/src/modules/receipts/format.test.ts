@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { balanceState, preview, roundMoney, serviceLabel, totals, typeChoices } from '@/modules/receipts/format';
+import { balanceState, pendingCharges, preview, roundMoney, serviceLabel, statement, totals, typeChoices } from '@/modules/receipts/format';
 import type { ClientBalance, Receipt, ServiceType } from '@/modules/receipts/types';
 
 describe('balanceState', () => {
@@ -46,5 +46,27 @@ describe('typeChoices', () => {
     ] as ServiceType[];
     expect(typeChoices(types).map((t) => t.id)).toEqual([1, 3]);
     expect(typeChoices(types, 2).map((t) => t.id)).toEqual([1, 2, 3]);
+  });
+});
+
+describe('report helpers', () => {
+  const entry = (id: number, receivedOn: string, charged: number, received: number) => ({ id, receivedOn, charged, received }) as Receipt;
+  const entries = [entry(3, '2026-03-10', 300, 0), entry(1, '2026-01-10', 300, 300), entry(2, '2026-02-10', 300, 100), entry(4, '2026-03-20', 0, 50)];
+
+  it('runs the balance in date order', () => {
+    expect(statement(entries).map((l) => [l.receipt.id, l.balance])).toEqual([
+      [1, 0],
+      [2, -200],
+      [3, -500],
+      [4, -450],
+    ]);
+  });
+
+  it('covers the oldest charges first', () => {
+    expect(pendingCharges(entries).map((p) => [p.receipt.id, p.paid, p.missing])).toEqual([
+      [2, 150, 150],
+      [3, 0, 300],
+    ]);
+    expect(pendingCharges([entry(1, '2026-01-10', 100, 150)])).toEqual([]);
   });
 });

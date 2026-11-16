@@ -25,6 +25,7 @@ import { formatMoney } from '@/modules/clients/format';
 import type { Client } from '@/modules/clients/types';
 import { receiptsApi, serviceTypesApi } from '@/modules/receipts/api';
 import { ReceiptFormModal } from '@/modules/receipts/components/ReceiptFormModal';
+import { ReceivablesReport } from '@/modules/receipts/components/ReceivablesReport';
 import { ServiceTypesModal } from '@/modules/receipts/components/ServiceTypesModal';
 import { balanceState, OTHER_SERVICE, PAYMENT_METHODS, serviceLabel, totals } from '@/modules/receipts/format';
 import type { Receipt, ReceiptInput, ReceiptListing, ServiceType } from '@/modules/receipts/types';
@@ -124,6 +125,8 @@ const BalanceList = styled.ul`
   list-style: none;
   margin: 0;
   padding: 0;
+  max-height: 560px;
+  overflow-y: auto;
 `;
 
 const BalanceRow = styled.li`
@@ -176,6 +179,8 @@ export function ReceiptsPage() {
   const [saving, setSaving] = useState(false);
   const [types, setTypes] = useState<ServiceType[]>([]);
   const [managingTypes, setManagingTypes] = useState(false);
+  /** undefined: report closed; null: all clients; a number: that client. */
+  const [report, setReport] = useState<number | null | undefined>(undefined);
 
   useEffect(() => {
     clientsApi
@@ -228,7 +233,14 @@ export function ReceiptsPage() {
   const balances = useMemo(() => listing?.balances ?? [], [listing]);
   const sums = useMemo(() => totals(items, balances), [items, balances]);
   const balanceOf = (id: number) => balances.find((b) => b.clientId === id)?.balance ?? 0;
-  const open = balances.filter((b) => Math.round(b.balance * 100) !== 0);
+  // todos os clientes com lançamentos, para abrir o relatório de qualquer um: em aberto primeiro, depois crédito e quitados
+  const clientBalances = useMemo(() => {
+    const rank = (b: (typeof balances)[number]) => {
+      const cents = Math.round(b.balance * 100);
+      return cents < 0 ? 0 : cents > 0 ? 1 : 2;
+    };
+    return [...balances].sort((a, b) => rank(a) - rank(b));
+  }, [balances]);
 
   async function save(input: ReceiptInput) {
     setSaving(true);
@@ -320,6 +332,8 @@ export function ReceiptsPage() {
           small
           tone={sums.open > 0 ? 'warning' : undefined}
           hint={sums.openClients ? `${sums.openClients} cliente${sums.openClients > 1 ? 's' : ''} em aberto` : 'nada em aberto'}
+          onClick={listing ? () => setReport(null) : undefined}
+          ariaLabel="Abrir o relatório de valores a receber"
         />
       </StatsRow>
 
@@ -437,15 +451,15 @@ export function ReceiptsPage() {
             <Empty>Não foi possível carregar os saldos.</Empty>
           ) : !listing ? (
             <LoadingState rows={3} />
-          ) : open.length === 0 ? (
-            <Empty>Nenhum cliente com crédito ou valor em aberto.</Empty>
+          ) : clientBalances.length === 0 ? (
+            <Empty>Nenhum cliente com lançamentos.</Empty>
           ) : (
             <BalanceList>
-              {open.map((b) => {
+              {clientBalances.map((b) => {
                 const state = balanceState(b.balance);
                 return (
                   <BalanceRow key={b.clientId}>
-                    <button type="button" onClick={() => setClientId(b.clientId)} title={`Ver os lançamentos de ${b.name}`}>
+                    <button type="button" onClick={() => setReport(b.clientId)} title={`Abrir o relatório de ${b.name}`}>
                       <strong>{b.name}</strong>
                       <StatusBadge tone={state.tone}>{state.text}</StatusBadge>
                     </button>
@@ -468,6 +482,17 @@ export function ReceiptsPage() {
         saving={saving}
         onSave={save}
         onCancel={() => setEditing(null)}
+      />
+
+      <ReceivablesReport
+        open={report !== undefined}
+        clientId={report ?? null}
+        reloadKey={reloadKey}
+        onShowEntries={(id) => {
+          setClientId(id);
+          setReport(undefined);
+        }}
+        onClose={() => setReport(undefined)}
       />
 
       <ServiceTypesModal open={managingTypes} types={types} onChange={changeTypes} onClose={() => setManagingTypes(false)} />

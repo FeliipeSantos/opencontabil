@@ -71,3 +71,49 @@ export function preview(previous: number, charged: number, received: number) {
     after: roundMoney(previous + received - charged),
   };
 }
+
+/** A charge still (partly) unpaid: what was charged, what the client's payments already covered and what is missing. */
+export interface PendingCharge {
+  receipt: Receipt;
+  paid: number;
+  missing: number;
+}
+
+/** One line of a client's statement, oldest first, with the balance after it (positive is credit). */
+export interface StatementLine {
+  receipt: Receipt;
+  balance: number;
+}
+
+/** Oldest first; on the same day, in the order they were entered. */
+function chronological(entries: Receipt[]): Receipt[] {
+  return [...entries].sort((a, b) => a.receivedOn.localeCompare(b.receivedOn) || a.id - b.id);
+}
+
+/** The client's entries in date order, each with the running balance. */
+export function statement(entries: Receipt[]): StatementLine[] {
+  let balance = 0;
+  return chronological(entries).map((receipt) => {
+    balance = roundMoney(balance + receipt.received - receipt.charged);
+    return { receipt, balance };
+  });
+}
+
+/**
+ * Charges that make up the open balance: everything the client paid covers the oldest charges
+ * first, so what is missing is always on the most recent ones. The sum of `missing` is the
+ * amount still to receive.
+ */
+export function pendingCharges(entries: Receipt[]): PendingCharge[] {
+  const ordered = chronological(entries);
+  let pool = Math.round(ordered.reduce((sum, r) => sum + r.received, 0) * 100);
+  const pending: PendingCharge[] = [];
+  for (const receipt of ordered) {
+    const charged = Math.round(receipt.charged * 100);
+    if (charged <= 0) continue;
+    const paid = Math.min(pool, charged);
+    pool -= paid;
+    if (charged > paid) pending.push({ receipt, paid: paid / 100, missing: (charged - paid) / 100 });
+  }
+  return pending;
+}
