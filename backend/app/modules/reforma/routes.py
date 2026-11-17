@@ -10,6 +10,8 @@ type are checked before (app.core.http).
     GET  /documents                      -> documents (source, kind, q, changed, limit, offset)
     GET  /documents/<id>                 -> one document with its version history
     GET  /documents/<id>/versions/<vid>  -> full text of one version
+    GET  /documents/<id>/versions/<vid>/analysis -> Análise IA of the version ({status: "none"} before asking)
+    POST /documents/<id>/versions/<vid>/analysis -> asks for it with the AI of Ajustes > Integrações (202)
     GET  /events                         -> calendar events of a period (from, to, kind, importance, subject,
                                             by=publicacao for the acts published in the period)
     GET  /events/<id>                    -> one event with its history
@@ -21,9 +23,10 @@ from datetime import datetime
 from flask import Blueprint, current_app, g, request
 
 from app.core.http import json_error, json_response
+from app.modules.intelligence.ai_summary import SummaryError
 from app.modules.intelligence.catalog import SUBJECT_IDS
+from app.modules.reforma import ai_analysis, monitor, recurring, repository, scheduler
 from app.modules.reforma import events as events_module
-from app.modules.reforma import monitor, recurring, repository, scheduler
 from app.modules.reforma.catalog import KINDS, SOURCE_IDS, SOURCES
 from app.modules.reforma.subjects import subject_list
 
@@ -159,3 +162,22 @@ def version_text(doc_id: str, version_id: str):
     if text is None and repository.get_document(doc_id) is None:
         return json_error(404, "Versão não encontrada")
     return json_response({"text": text or ""})
+
+
+@bp.get("/documents/<doc_id>/versions/<version_id>/analysis")
+def version_analysis(doc_id: str, version_id: str):
+    valid = ID_PATTERN.fullmatch(doc_id) and ID_PATTERN.fullmatch(version_id)
+    found = ai_analysis.get(doc_id, version_id) if valid else None
+    return json_response(found) if found else json_error(404, "Versão não encontrada")
+
+
+@bp.post("/documents/<doc_id>/versions/<version_id>/analysis")
+def request_version_analysis(doc_id: str, version_id: str):
+    # gerada só quando pedida, com a IA escolhida em Ajustes > Integrações
+    if not ID_PATTERN.fullmatch(doc_id) or not ID_PATTERN.fullmatch(version_id):
+        return json_error(404, "Versão não encontrada")
+    try:
+        result = ai_analysis.request_analysis(doc_id, version_id, g.user)
+    except SummaryError as err:
+        return json_error(err.status, err.message)
+    return json_response(result, 202)

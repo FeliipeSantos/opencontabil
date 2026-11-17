@@ -100,17 +100,19 @@ O banco é compartilhado entre as implementações: as tabelas `core_*`, `projec
 
 ### Integrações: `/api/integrations`
 
-Serviços externos da instalação, em Ajustes > Integrações. O Assistente de IA usa a **assinatura da própria pessoa**: Claude (Pro ou Max) ou ChatGPT (Plus ou Pro), pelas ferramentas oficiais Claude Code e Codex instaladas no servidor. Não há chave de API, e o app nunca vê nem guarda credenciais: o login é feito na página oficial de cada serviço e fica com a ferramenta, na pasta `AI_HOMES_DIR` (padrão: `ai-homes` ao lado do banco).
+Serviços externos da instalação, em Ajustes > Integrações. O Assistente de IA usa a **assinatura da própria pessoa**: Claude (Pro ou Max) ou ChatGPT (Plus ou Pro), pelas ferramentas oficiais Claude Code e Codex instaladas no servidor. Nesses dois não há chave de API, e o app nunca vê nem guarda credenciais: o login é feito na página oficial de cada serviço e fica com a ferramenta, na pasta `AI_HOMES_DIR` (padrão: `ai-homes` ao lado do banco). O terceiro tipo, **Gemini**, usa a chave de API gratuita da pessoa (Google AI Studio), guardada no banco.
 
 | Método e rota | Resposta |
 |---|---|
-| `GET /api/integrations/ai` | `{ activeProvider, providers: [{ id, name, plan, installed, connected, account, error }], login }`. `id` é `claude` ou `codex`; `activeProvider` é `claude` até outro ser escolhido; `?fresh=1` confere de novo com as ferramentas (sem isso, a situação vale por 30 segundos) |
+| `GET /api/integrations/ai` | `{ activeProvider, providers: [{ id, name, plan, kind, installed, connected, account, error }], login }`. `id` é `claude`, `codex` ou `gemini`; `kind` é `cli` (assinatura) ou `key` (chave de API; `account` mostra só os últimos dígitos, a chave nunca volta); `activeProvider` é `claude` até outro ser escolhido; `?fresh=1` confere de novo com as ferramentas (sem isso, a situação vale por 30 segundos) |
 | `PUT /api/integrations/ai/active` `{ provider }` | Escolhe a IA usada pelo Resumo IA. `400` tipo desconhecido |
 | `POST /api/integrations/ai/:provider/login` | Começa o login oficial e devolve o status com `login = { provider, state, url, code, needsCode, message }`. ChatGPT: abrir `url` e digitar `code` (vale 15 minutos). Claude: abrir `url` e colar aqui o código que a página mostra (`needsCode`). `400` se a ferramenta não está instalada; `404` tipo desconhecido |
 | `POST /api/integrations/ai/:provider/login/code` `{ code }` | Claude: envia o código colado. `400` sem login esperando código |
 | `DELETE /api/integrations/ai/:provider/login` | Cancela o login em andamento |
-| `POST /api/integrations/ai/:provider/logout` | Desconecta a assinatura: a ferramenta sai da conta e a pasta do login é apagada |
+| `POST /api/integrations/ai/:provider/logout` | Desconecta a assinatura: a ferramenta sai da conta e a pasta do login é apagada. No Gemini, apaga a chave |
+| `PUT /api/integrations/ai/:provider/key` `{ key }` | Gemini: confere a chave com o Google e a salva. `400` chave recusada, sem acesso ao Google ou tipo que não usa chave (o `login` do Gemini também responde `400`) |
 
+- **Gemini:** modelo `gemini-flash-latest` (troca com `AI_GEMINI_MODEL`), chamado em `generateContent` com resposta em JSON e o formato do resumo nas instruções (o esquema imposto no pedido faz alguns modelos travarem). Se o modelo estiver sobrecarregado (`503`), sem cota (`429`), fora do ar, demorar mais de 2 minutos ou responder fora do formato, o pedido passa para os reservas de `AI_GEMINI_FALLBACK_MODELS` (padrão: `gemini-3-flash-preview`, `gemini-flash-lite-latest`, `gemini-2.5-flash`); o resumo mostra o modelo que respondeu. No plano gratuito o Google pode usar o que é enviado para melhorar os produtos dele, e o limite gratuito estourado vira erro no resumo (`429`).
 - **`login.state`:** `starting`, `waiting` (esperando a pessoa na página), `checking`, `success`, `failed` (com `message`) ou `canceled`. A tela consulta o status a cada 2 segundos enquanto o login está aberto.
 - **Uma pessoa:** é para usar só a própria assinatura. Os termos da Anthropic permitem entrar no Claude Code oficial com a própria assinatura, mas não oferecer esse login a outras pessoas; a OpenAI indica o login do ChatGPT para "trusted runners" (máquinas de confiança).
 
@@ -178,8 +180,8 @@ Fonte que entra no catálogo depois vem ativada. As escolhas do usuário para as
 
 | Método e rota | Resposta |
 |---|---|
-| `GET /api/intelligence/publications/:id/ai-summary` | `{ status: "none" }` antes de pedir; depois `{ status, provider, providerName, model, summary, partial, error, requestedBy, updatedAt, outdated }`. `404` publicação inexistente |
-| `POST /api/intelligence/publications/:id/ai-summary` | Pede o resumo (ou "Gerar de novo") com a IA escolhida em Integrações: `202` com `status: "pending"`. `400` se a ferramenta não está instalada ou a assinatura não está conectada |
+| `GET /api/intelligence/publications/:id/ai-summary` | `{ status: "none" }` antes de pedir; depois `{ status, provider, providerName, providerKind, model, summary, partial, error, requestedBy, updatedAt, outdated }`. `404` publicação inexistente |
+| `POST /api/intelligence/publications/:id/ai-summary` | Pede o resumo (ou "Gerar de novo") com a IA escolhida em Integrações: `202` com `status: "pending"`. `400` se a ferramenta não está instalada, a assinatura não está conectada ou falta a chave do Gemini |
 
 - **Só quando pedido:** nada é gerado na coleta. O resumo fica salvo e aparece nas próximas aberturas; um novo só sai com outro `POST`. Um pedido por vez no servidor.
 - **`status`:** `pending` (a tela consulta a cada 3 segundos), `ok` ou `error` (com `error`). Um `pending` com mais de 10 minutos foi interrompido e aparece como `error`.
@@ -227,6 +229,8 @@ Liberado para todo usuário conectado, como os outros módulos.
 | `GET /documents` | `{ total, items: [documento] }`; filtros `source`, `kind`, `q`, `changed=versions`; `limit` (até 100) e `offset` |
 | `GET /documents/:id` | Documento com `versions: [{ id, label, title, summary, publishedAt, detectedAt, fileUrl, fileStatus, fileError, analysisStatus, textLength }]`, da mais nova para a mais antiga |
 | `GET /documents/:id/versions/:vid` | `{ text }`: texto completo da versão |
+| `GET /documents/:id/versions/:vid/analysis` | Análise IA da versão, no mesmo formato do Resumo IA das Publicações (`{ status: "none" }` antes de pedir). `404` versão inexistente |
+| `POST /documents/:id/versions/:vid/analysis` | Pede a análise (ou "Gerar de novo") com a IA escolhida em Integrações: `202` com `status: "pending"`. Só quando pedida; fica salva em `reforma_version_analyses` e a versão passa a `analysisStatus: "done"` (ou `"error"`). `400` IA não conectada |
 | `GET /events` | Eventos ativos do calendário entre `from` e `to` (`aaaa-mm-dd`, até 13 meses); filtros `kind`, `importance` (lista separada por vírgula), `subject` (ids de assunto separados por vírgula, os mesmos do módulo Publicações), `officialOnly=true` (sem as datas que o próprio ato chama de previstas) |
 | `GET /events/:id` | Um evento com `history: [{ changedAt, change: "criado" \| "atualizado" \| "substituido", versionId, before }]` |
 

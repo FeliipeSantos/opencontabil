@@ -75,6 +75,26 @@ class DocumentVersion(db.Model):
     run_id: Mapped[str | None] = mapped_column(Text)
 
 
+class VersionAnalysis(db.Model):
+    """Análise IA of one version, generated only when asked (the same engine as the Resumo IA of
+    the Publicações) and kept for the next openings. status: "pending", "ok" or "error"."""
+
+    __tablename__ = "reforma_version_analyses"
+
+    version_id: Mapped[str] = mapped_column(Text, ForeignKey("reforma_document_versions.id", ondelete="CASCADE"), primary_key=True)
+    status: Mapped[str] = mapped_column(Text, nullable=False)
+    provider: Mapped[str] = mapped_column(Text, nullable=False)
+    model: Mapped[str | None] = mapped_column(Text)
+    summary: Mapped[str | None] = mapped_column(Text)
+    error: Mapped[str | None] = mapped_column(Text)
+    source_hash: Mapped[str] = mapped_column(Text, nullable=False)
+    prompt_version: Mapped[str] = mapped_column(Text, nullable=False)
+    partial: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
+    requested_by: Mapped[str | None] = mapped_column(Text, ForeignKey("core_users.username", ondelete="SET NULL", onupdate="CASCADE"))
+    created_at: Mapped[str] = mapped_column(Text, nullable=False)
+    updated_at: Mapped[str] = mapped_column(Text, nullable=False)
+
+
 class SyncRun(db.Model):
     """One synchronization of the monitored sources."""
 

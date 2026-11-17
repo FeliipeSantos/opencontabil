@@ -31,7 +31,8 @@ export const FILE_STATUS: Record<FileStatus, { label: string; tone: Tone; hint: 
 export const VERSION_HINTS = {
   current: 'É a versão mais recente encontrada na fonte oficial. As datas do calendário vêm dela; as anteriores ficam guardadas como histórico.',
   pendingAnalysis:
-    'A análise por IA (impacto, quem é afetado e providência) ainda não foi feita para esta versão: ela é a próxima etapa do módulo. As datas do calendário não dependem dela, são extraídas por regras do texto oficial.',
+    'A análise por IA (impacto, quem é afetado e providência) ainda não foi pedida para esta versão. Ela só é feita quando você clica em "Análise IA", para não gastar o seu plano. As datas do calendário não dependem dela, são extraídas por regras do texto oficial.',
+  analysisDone: 'Esta versão já tem uma análise por IA guardada. Clique em "Análise IA" para ver; uma nova só é feita se você pedir.',
 };
 
 /** Why a version is the current one. */

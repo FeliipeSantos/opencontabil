@@ -1,6 +1,6 @@
 import { Alert, Button, Flex, Spin, Tag, Tooltip } from 'antd';
 import { Sparkles } from 'lucide-react';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import styled from 'styled-components';
 
@@ -37,10 +37,12 @@ interface AiSummary {
   informacoes_faltando: string[];
 }
 
-interface AiSummaryState {
+export interface AiSummaryState {
   status: 'none' | 'pending' | 'ok' | 'error';
   provider?: string;
   providerName?: string;
+  /** "key": made with the free Gemini key, not a subscription. */
+  providerKind?: 'cli' | 'key';
   model?: string | null;
   summary?: AiSummary | null;
   partial?: boolean;
@@ -57,6 +59,32 @@ const aiSummaryApi = {
 };
 
 const POLL_MS = 3000;
+
+/** Where the panel reads and asks for the AI text: a publication or a Calendário version. */
+export interface AiPanelApi {
+  get: () => Promise<AiSummaryState>;
+  request: () => Promise<AiSummaryState>;
+}
+
+type PanelKind = 'resumo' | 'analise';
+
+const TEXTS: Record<PanelKind, { intro: string; action: string; failed: string; reading: string; outdated: string }> = {
+  resumo: {
+    intro: 'Peça um resumo desta publicação à IA conectada em Ajustes > Integrações. Ele fica salvo para as próximas vezes.',
+    action: 'Gerar resumo com IA',
+    failed: 'Não foi possível gerar o resumo.',
+    reading: 'está lendo a publicação',
+    outdated: 'O texto da publicação mudou depois deste resumo. Gere de novo para atualizar.',
+  },
+  analise: {
+    intro:
+      'Peça a análise desta versão à IA conectada em Ajustes > Integrações: impacto, quem é afetado e o que fazer. Ela só é feita quando você pede e fica salva para as próximas vezes.',
+    action: 'Gerar análise com IA',
+    failed: 'Não foi possível gerar a análise.',
+    reading: 'está lendo o documento',
+    outdated: 'O texto desta versão mudou depois desta análise. Gere de novo para atualizar.',
+  },
+};
 
 const KIND: Record<AiSummary['tipo'], string> = {
   norma: 'Norma',
@@ -174,7 +202,7 @@ function Points({ title, points }: { title: string; points: AiPoint[] }) {
   );
 }
 
-function SummaryView({ state }: { state: AiSummaryState & { summary: AiSummary } }) {
+function SummaryView({ state, kind }: { state: AiSummaryState & { summary: AiSummary }; kind: PanelKind }) {
   const { summary } = state;
   const confidence = CONFIDENCE[summary.confianca];
   return (
@@ -184,7 +212,7 @@ function SummaryView({ state }: { state: AiSummaryState & { summary: AiSummary }
         <Tag color={confidence.color}>{confidence.label}</Tag>
       </Flex>
       {summary.do_que_se_trata && <Lead>{summary.do_que_se_trata}</Lead>}
-      {state.outdated && <Alert type="warning" showIcon message="O texto da publicação mudou depois deste resumo. Gere de novo para atualizar." />}
+      {state.outdated && <Alert type="warning" showIcon message={TEXTS[kind].outdated} />}
       {state.partial && <Alert type="info" showIcon message="O ato é muito longo: a IA recebeu só a primeira parte do texto oficial." />}
       <Points title="Quem é afetado" points={summary.quem_e_afetado} />
       <Points title="Quem não é afetado" points={summary.quem_nao_e_afetado} />
@@ -229,7 +257,7 @@ function SummaryView({ state }: { state: AiSummaryState & { summary: AiSummary }
         {summary.motivo_confianca && <span>{summary.motivo_confianca}</span>}
         <span>
           Gerado pelo {state.providerName}
-          {state.model ? ` (${state.model})` : ''} com a sua assinatura{state.updatedAt ? ` em ${formatDateTime(state.updatedAt)}` : ''}. A IA pode errar: confira
+          {state.model ? ` (${state.model})` : ''} com a sua {state.providerKind === 'key' ? 'chave gratuita' : 'assinatura'}{state.updatedAt ? ` em ${formatDateTime(state.updatedAt)}` : ''}. A IA pode errar: confira
           sempre o texto oficial. Não constitui parecer jurídico ou contábil.
         </span>
       </Footer>
@@ -237,8 +265,15 @@ function SummaryView({ state }: { state: AiSummaryState & { summary: AiSummary }
   );
 }
 
-/** "Resumo IA" tab: made only when asked, with the subscription chosen in Ajustes > Integrações. */
+/** "Resumo IA" tab of a publication. */
 export function AiSummaryTab({ publicationId }: { publicationId: string }) {
+  const api = useMemo<AiPanelApi>(() => ({ get: () => aiSummaryApi.get(publicationId), request: () => aiSummaryApi.request(publicationId) }), [publicationId]);
+  return <AiAnalysisPanel api={api} kind="resumo" />;
+}
+
+/** AI text made only when asked, with the AI chosen in Ajustes > Integrações, and kept for the next openings. */
+export function AiAnalysisPanel({ api, kind }: { api: AiPanelApi; kind: PanelKind }) {
+  const texts = TEXTS[kind];
   const [state, setState] = useState<AiSummaryState | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [requestError, setRequestError] = useState<string | null>(null);
@@ -246,11 +281,11 @@ export function AiSummaryTab({ publicationId }: { publicationId: string }) {
 
   const load = useCallback(() => {
     setLoadError(null);
-    aiSummaryApi
-      .get(publicationId)
+    api
+      .get()
       .then(setState)
       .catch((error) => setLoadError(errorMessage(error)));
-  }, [publicationId]);
+  }, [api]);
 
   useEffect(load, [load]);
 
@@ -259,19 +294,19 @@ export function AiSummaryTab({ publicationId }: { publicationId: string }) {
   useEffect(() => {
     if (!pending) return undefined;
     const timer = window.setInterval(() => {
-      aiSummaryApi
-        .get(publicationId)
+      api
+        .get()
         .then(setState)
         .catch(() => undefined);
     }, POLL_MS);
     return () => window.clearInterval(timer);
-  }, [pending, publicationId]);
+  }, [pending, api]);
 
   async function generate() {
     setRequesting(true);
     setRequestError(null);
     try {
-      setState(await aiSummaryApi.request(publicationId));
+      setState(await api.request());
     } catch (error) {
       setRequestError(errorMessage(error));
     } finally {
@@ -288,7 +323,7 @@ export function AiSummaryTab({ publicationId }: { publicationId: string }) {
       type="warning"
       showIcon
       message={requestError}
-      description={requestError.includes('Integrações') || requestError.includes('instalada') ? <>Abra {settingsLink} para conectar a assinatura.</> : undefined}
+      description={requestError.includes('Integrações') || requestError.includes('instalada') ? <>Abra {settingsLink} para conectar a IA.</> : undefined}
     />
   );
 
@@ -297,7 +332,9 @@ export function AiSummaryTab({ publicationId }: { publicationId: string }) {
       <Empty>
         <Flex gap={10} align="center">
           <Spin size="small" />
-          <span>{state.providerName ?? 'A IA'} está lendo a publicação. Isso costuma levar menos de um minuto.</span>
+          <span>
+            {state.providerName ?? 'A IA'} {texts.reading}. Isso costuma levar menos de um minuto.
+          </span>
         </Flex>
       </Empty>
     );
@@ -306,7 +343,7 @@ export function AiSummaryTab({ publicationId }: { publicationId: string }) {
   if (state.status === 'ok' && state.summary) {
     return (
       <Box>
-        <SummaryView state={state as AiSummaryState & { summary: AiSummary }} />
+        <SummaryView state={state as AiSummaryState & { summary: AiSummary }} kind={kind} />
         {requestAlert}
         <Flex>
           <Button onClick={() => void generate()} loading={requesting}>
@@ -323,14 +360,12 @@ export function AiSummaryTab({ publicationId }: { publicationId: string }) {
         <Flex gap={10} align="center">
           <Sparkles size={18} aria-hidden />
           <span>
-            {state.status === 'error'
-              ? 'Não foi possível gerar o resumo.'
-              : 'Peça um resumo desta publicação à IA conectada em Ajustes > Integrações. Ele usa a sua assinatura e fica salvo para as próximas vezes.'}
+            {state.status === 'error' ? texts.failed : texts.intro}
           </span>
         </Flex>
         {state.status === 'error' && state.error && <Alert type="error" showIcon message={state.error} />}
         <Button type="primary" onClick={() => void generate()} loading={requesting}>
-          {state.status === 'error' ? 'Tentar de novo' : 'Gerar resumo com IA'}
+          {state.status === 'error' ? 'Tentar de novo' : texts.action}
         </Button>
       </Empty>
       {requestAlert}

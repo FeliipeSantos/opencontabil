@@ -1,16 +1,18 @@
 """External services of the installation (/api/integrations), changed in Ajustes > Integrações.
 
 The AI assistant uses the person's own subscription through the official CLIs (see ai_cli.py):
-Claude (Claude Pro/Max) or ChatGPT (Plus/Pro). There is no API key.
+Claude (Claude Pro/Max) or ChatGPT (Plus/Pro), or the Gemini with the person's free API key from
+Google AI Studio (see ai_gemini.py; the key is kept in the database and never sent back).
 
     GET    /ai                          -> status
     PUT    /ai/active                   { provider } -> chooses the AI in use, returns the status
     POST   /ai/<provider>/login         -> starts the official login (link + code), returns the status
     POST   /ai/<provider>/login/code    { code } -> Claude: sends the code shown by the browser
     DELETE /ai/<provider>/login         -> cancels a login in progress
-    POST   /ai/<provider>/logout        -> disconnects the subscription (removes the CLI login)
+    POST   /ai/<provider>/logout        -> disconnects the subscription (removes the CLI login or the key)
+    PUT    /ai/<provider>/key           { key } -> Gemini: checks the key with Google and saves it
 
-status = { activeProvider, providers: [{ id, name, plan, installed, connected, account, error }],
+status = { activeProvider, providers: [{ id, name, plan, kind, installed, connected, account, error }],
            login: { provider, state, url, code, needsCode, message } | null }
 """
 
@@ -18,7 +20,7 @@ import logging
 
 from flask import Blueprint, g, request
 
-from app.core import ai_cli
+from app.core import ai_cli, ai_gemini
 from app.core.database import utc_now_iso
 from app.core.http import json_error, json_response
 from app.core.models import AppSetting
@@ -30,12 +32,13 @@ ACTIVE_SETTING = "ai.provider"
 DEFAULT_PROVIDER = "claude"
 MAX_BODY_BYTES = 4 * 1024
 MAX_CODE_LENGTH = 512
+MAX_KEY_LENGTH = 200
 
 bp = Blueprint("integrations", __name__, url_prefix="/api/integrations")
 
 
 def active_provider() -> str:
-    """AI chosen in Ajustes (Claude unless ChatGPT was chosen); its connection is checked on use."""
+    """AI chosen in Ajustes (Claude unless another was chosen); its connection is checked on use."""
     setting = db.session.get(AppSetting, ACTIVE_SETTING)
     return setting.value if setting and setting.value in ai_cli.PROVIDERS else DEFAULT_PROVIDER
 
@@ -43,7 +46,8 @@ def active_provider() -> str:
 def _status(fresh: bool = False) -> dict:
     providers = []
     for provider in ai_cli.PROVIDERS.values():
-        providers.append({"id": provider.id, "name": provider.name, "plan": provider.plan, **ai_cli.connection(provider.id, fresh=fresh)})
+        connection = ai_cli.connection(provider.id, fresh=fresh)
+        providers.append({"id": provider.id, "name": provider.name, "plan": provider.plan, "kind": provider.kind, **connection})
     login = next((state for p in ai_cli.PROVIDERS if (state := ai_cli.login_state(p))), None)
     return {"activeProvider": active_provider(), "providers": providers, "login": login}
 
@@ -123,3 +127,20 @@ def logout(provider_id: str):
     ai_cli.logout(provider_id)
     logger.info("[ia] %s desconectado por %s", provider_id, g.user)
     return json_response(_status(fresh=True))
+
+
+@bp.put("/ai/<provider_id>/key")
+def save_key(provider_id: str):
+    if not _known(provider_id):
+        return json_error(404, "Tipo de IA desconhecido.")
+    if ai_cli.PROVIDERS[provider_id].kind != "key":
+        return json_error(400, "Este tipo de IA usa a assinatura, sem chave de API.")
+    key = _body().get("key")
+    if not isinstance(key, str) or not key.strip() or len(key) > MAX_KEY_LENGTH:
+        return json_error(400, "Cole a chave de API do Gemini.")
+    try:
+        ai_gemini.save_key(key, g.user)
+    except ai_gemini.GeminiError as err:
+        return json_error(400, str(err))
+    logger.info("[ia] chave do %s cadastrada por %s", provider_id, g.user)
+    return json_response(_status())

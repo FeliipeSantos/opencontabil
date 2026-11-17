@@ -11,6 +11,8 @@ subscription: never connect someone's subscription for other people to use.
 
 Each run gets an allowlisted environment (no API keys or app secrets), an empty temporary working
 folder, no tools, no MCP servers and no session history.
+
+The Gemini is the exception: it has no CLI here and uses the person's free API key (ai_gemini.py).
 """
 
 import json
@@ -26,6 +28,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from flask import current_app
+
+from app.core import ai_gemini
 
 logger = logging.getLogger(__name__)
 
@@ -95,6 +99,8 @@ class Provider:
     bin_env: str
     model_env: str
     default_model: str | None
+    # "cli": official tool with the subscription; "key": free API key (Gemini, see ai_gemini.py)
+    kind: str = "cli"
 
 
 PROVIDERS = {
@@ -102,12 +108,15 @@ PROVIDERS = {
     for p in (
         Provider("claude", "Claude", "Claude Pro ou Max", "claude", "AI_CLAUDE_BIN", "AI_CLAUDE_MODEL", "sonnet"),
         Provider("codex", "ChatGPT", "ChatGPT Plus ou Pro", "codex", "AI_CODEX_BIN", "AI_CODEX_MODEL", None),
+        Provider("gemini", "Gemini", "chave gratuita do Google AI Studio", "", "", "AI_GEMINI_MODEL", ai_gemini.DEFAULT_MODEL, "key"),
     )
 }
 
 
 def binary_path(provider: Provider) -> str | None:
     """Executable of the CLI (AI_CLAUDE_BIN / AI_CODEX_BIN, or found on PATH), or None when not installed."""
+    if provider.kind != "cli":
+        return None
     configured = os.environ.get(provider.bin_env)
     if configured:
         return configured if Path(configured).exists() else None
@@ -225,6 +234,9 @@ def _check(provider: Provider) -> dict:
 def connection(provider_id: str, *, fresh: bool = False) -> dict:
     """{installed, connected, account, error} of a provider, cached for a few seconds."""
     provider = PROVIDERS[provider_id]
+    if provider.kind == "key":
+        # só lê o banco; "Verificar conexão" (fresh) também pergunta ao Google
+        return ai_gemini.status(online=fresh)
     now = time.monotonic()
     with _status_lock:
         cached = _status_cache.get(provider_id)
@@ -239,6 +251,9 @@ def connection(provider_id: str, *, fresh: bool = False) -> dict:
 def logout(provider_id: str) -> None:
     """Signs the CLI out and removes its folder (nothing of the login stays on the server)."""
     provider = PROVIDERS[provider_id]
+    if provider.kind == "key":
+        ai_gemini.remove_key()
+        return
     cancel_login(provider_id)
     try:
         if provider.id == "claude":
@@ -334,6 +349,8 @@ def _wait_login(session: LoginSession, app) -> None:
 def start_login(provider_id: str) -> dict:
     """Starts the official login of the CLI and returns the session (link, code). One per provider."""
     provider = PROVIDERS[provider_id]
+    if provider.kind == "key":
+        raise AiError(f"O {provider.name} usa uma chave de API: cole a chave em Ajustes > Integrações.")
     binary = binary_path(provider)
     if binary is None:
         raise AiError(f"A ferramenta do {provider.name} não está instalada neste servidor.")
@@ -488,6 +505,11 @@ def generate(provider_id: str, instruction: str, data: str, schema: dict) -> dic
     """Runs one request on the subscription and returns the JSON answer that follows `schema`.
     The instruction and `data` (the publication) go on stdin; the run happens in an empty temporary folder."""
     provider = PROVIDERS[provider_id]
+    if provider.kind == "key":
+        try:
+            return ai_gemini.generate(instruction, data, schema)
+        except ai_gemini.GeminiError as err:
+            raise AiError(str(err)) from err
     workdir = Path(tempfile.mkdtemp(prefix="opencontabil-ia-"))
     try:
         if provider.id == "claude":

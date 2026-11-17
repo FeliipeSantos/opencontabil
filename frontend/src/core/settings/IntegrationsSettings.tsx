@@ -9,13 +9,15 @@ import { About, Panel, Row } from '@/core/settings/layout';
 import { ErrorState, IconCircle, LoadingState } from '@/core/ui';
 import { colors, radius } from '@/theme';
 
-type ProviderId = 'claude' | 'codex';
+type ProviderId = 'claude' | 'codex' | 'gemini';
 
 interface ProviderStatus {
   id: ProviderId;
   name: string;
   /** Plans that work ("Claude Pro ou Max"). */
   plan: string;
+  /** "cli": subscription through the official tool; "key": free API key (Gemini). */
+  kind: 'cli' | 'key';
   /** The official CLI is on this server. */
   installed: boolean;
   connected: boolean;
@@ -48,7 +50,10 @@ const aiApi = {
   sendCode: (provider: ProviderId, code: string) => apiRequest<AiStatus>(`${BASE}/${provider}/login/code`, { method: 'POST', body: { code } }),
   cancel: (provider: ProviderId) => apiRequest<AiStatus>(`${BASE}/${provider}/login`, { method: 'DELETE' }),
   logout: (provider: ProviderId) => apiRequest<AiStatus>(`${BASE}/${provider}/logout`, { method: 'POST' }),
+  saveKey: (provider: ProviderId, key: string) => apiRequest<AiStatus>(`${BASE}/${provider}/key`, { method: 'PUT', body: { key } }),
 };
+
+const AI_STUDIO_URL = 'https://aistudio.google.com/apikey';
 
 const ACTIVE_LOGIN = ['starting', 'waiting', 'checking'];
 const POLL_MS = 2000;
@@ -132,6 +137,11 @@ const CodeRow = styled(Flex)`
     flex: 1;
     min-width: 220px;
   }
+`;
+
+const KeyInput = styled(Input.Password)`
+  flex: 1;
+  min-width: 220px;
 `;
 
 const Hint = styled.p`
@@ -233,6 +243,109 @@ function LoginSteps({ provider, login, onStatus }: { provider: ProviderStatus; l
   );
 }
 
+/** Gemini: the person's free API key from Google AI Studio, checked with Google before it is saved. */
+function GeminiKey({ provider, onStatus }: { provider: ProviderStatus; onStatus: (s: AiStatus) => void }) {
+  const { message } = App.useApp();
+  const [key, setKey] = useState('');
+  const [replacing, setReplacing] = useState(false);
+  const [busy, setBusy] = useState<'save' | 'check' | 'remove' | null>(null);
+
+  async function run(kind: 'save' | 'check' | 'remove', action: () => Promise<AiStatus>, done: string) {
+    setBusy(kind);
+    try {
+      onStatus(await action());
+      message.success(done);
+      if (kind === 'save') {
+        setKey('');
+        setReplacing(false);
+      }
+    } catch (error) {
+      message.error(errorMessage(error));
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  if (provider.connected && !replacing) {
+    return (
+      <>
+        <Line>
+          <strong>{provider.name}</strong>
+          <Tag color="green">Conectado</Tag>
+          {provider.account && <span>{provider.account}</span>}
+        </Line>
+        <Flex gap={8} wrap>
+          <Button onClick={() => void run('check', () => aiApi.status(true), 'Conexão conferida.')} loading={busy === 'check'}>
+            Verificar conexão
+          </Button>
+          <Button onClick={() => setReplacing(true)}>Trocar chave</Button>
+          <Popconfirm
+            title="Remover a chave do Gemini?"
+            description="A chave sai deste servidor. Os resumos já gerados continuam salvos."
+            okText="Remover"
+            okButtonProps={{ danger: true }}
+            cancelText="Cancelar"
+            onConfirm={() => void run('remove', () => aiApi.logout(provider.id), 'Chave removida.')}
+          >
+            <Button danger loading={busy === 'remove'}>
+              Remover chave
+            </Button>
+          </Popconfirm>
+        </Flex>
+      </>
+    );
+  }
+
+  const save = () => {
+    if (key.trim()) void run('save', () => aiApi.saveKey(provider.id, key), 'Chave do Gemini conectada.');
+  };
+  return (
+    <>
+      {!replacing && (
+        <Line>
+          <Bot size={18} aria-hidden />
+          <span>O Gemini não está conectado. Funciona com uma chave gratuita do Google AI Studio, sem cartão de crédito.</span>
+        </Line>
+      )}
+      {provider.error && <Alert type="warning" showIcon message={provider.error} />}
+      <Steps>
+        <li>
+          Abra o Google AI Studio e entre com a sua conta Google:
+          <br />
+          <a href={AI_STUDIO_URL} target="_blank" rel="noopener noreferrer">
+            {AI_STUDIO_URL}
+            <ExternalLink size={12} aria-hidden />
+          </a>
+        </li>
+        <li>Clique em “Create API key” (Criar chave de API) e copie a chave criada.</li>
+        <li>
+          Cole a chave aqui:
+          <CodeRow gap={8} wrap>
+            <KeyInput
+              value={key}
+              onChange={(event) => setKey(event.target.value)}
+              placeholder="AQ.… ou AIza…"
+              aria-label="Chave de API do Gemini"
+              autoComplete="off"
+              maxLength={200}
+              onPressEnter={save}
+            />
+            <Button type="primary" onClick={save} loading={busy === 'save'} disabled={!key.trim()}>
+              Salvar chave
+            </Button>
+          </CodeRow>
+        </li>
+      </Steps>
+      {replacing && (
+        <Flex>
+          <Button onClick={() => setReplacing(false)}>Cancelar</Button>
+        </Flex>
+      )}
+      <Hint>No plano gratuito, o Google pode usar o que é enviado para melhorar os produtos dele. As publicações são textos oficiais e públicos.</Hint>
+    </>
+  );
+}
+
 /** "Assistente de IA" row: the AI in use and the person's own subscription, connected by the official login. */
 function AiAssistant() {
   const { message } = App.useApp();
@@ -282,8 +395,8 @@ function AiAssistant() {
         <div>
           <h2>Assistente de IA</h2>
           <p>
-            Conecte a sua própria assinatura do Claude (Pro ou Max) ou do ChatGPT (Plus ou Pro). O uso conta no limite do seu plano, nada é cobrado à parte, e o
-            login é feito na página oficial de cada serviço.
+            Conecte a sua própria assinatura do Claude (Pro ou Max) ou do ChatGPT (Plus ou Pro), com o login na página oficial de cada serviço, ou use o Gemini
+            com uma chave gratuita do Google. Nada é cobrado à parte.
           </p>
         </div>
       </About>
@@ -302,7 +415,9 @@ function AiAssistant() {
             onChange={(value) => void run('choose', () => aiApi.choose(value as ProviderId))}
           />
           <Box $empty={!current.connected}>
-            {!current.installed ? (
+            {current.kind === 'key' ? (
+              <GeminiKey provider={current} onStatus={setStatus} />
+            ) : !current.installed ? (
               <Line>
                 <Bot size={18} aria-hidden />
                 <span>
@@ -363,7 +478,9 @@ function AiAssistant() {
             )}
           </Box>
           <Hint>
-            Use só a sua própria assinatura. O opencontabil não vê nem guarda a sua senha: o login fica com a ferramenta oficial do serviço, neste servidor.
+            {current.kind === 'key'
+              ? 'Use só a sua própria chave. Ela fica guardada no banco deste servidor (e nas cópias do banco) e nunca volta para a tela, só os últimos dígitos.'
+              : 'Use só a sua própria assinatura. O opencontabil não vê nem guarda a sua senha: o login fica com a ferramenta oficial do serviço, neste servidor.'}
           </Hint>
         </Side>
       )}

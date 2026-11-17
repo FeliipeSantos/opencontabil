@@ -64,9 +64,9 @@ export function SourcesView({ status, refreshKey }: { status: Status; refreshKey
         <StatCard
           icon={<ClockCircleOutlined />}
           iconTone="orange"
-          label="Pendentes de análise"
+          label="Sem análise IA"
           value={status.totals.pendingAnalysis}
-          hint={status.totals.pendingFiles ? `${status.totals.pendingFiles} PDF(s) a baixar` : 'análise por IA na etapa 2'}
+          hint={status.totals.pendingFiles ? `${status.totals.pendingFiles} PDF(s) a baixar` : 'feita só quando você pede'}
         />
         <StatCard
           icon={<WarningOutlined />}

@@ -81,12 +81,13 @@ A imagem da `api` já traz as ferramentas oficiais **Claude Code** e **Codex**, 
 1. Em **Ajustes > Integrações**, escolha o tipo de IA e clique em **Conectar assinatura**.
 2. **ChatGPT:** abra o link mostrado e digite o código (vale 15 minutos). Se a página recusar, ative o login por código de dispositivo nas configurações de segurança do ChatGPT.
 3. **Claude:** abra o link, entre na conta e cole no opencontabil o código que a página mostra no fim.
-4. Numa publicação, abra a aba **Resumo IA** e clique em **Gerar resumo com IA**.
+4. **Gemini (gratuito):** crie uma chave em `https://aistudio.google.com/apikey` (conta Google, sem cartão) e cole em Integrações. Não precisa de nada instalado.
+5. Numa publicação, abra a aba **Resumo IA** e clique em **Gerar resumo com IA**.
 
-- **Custo:** o uso conta no limite do seu plano; nada é cobrado à parte.
+- **Custo:** o uso conta no limite do seu plano; nada é cobrado à parte. No Gemini, o plano gratuito tem limite de uso, e o Google pode usar o que é enviado para melhorar os produtos dele.
 - **Uma pessoa:** conecte só a sua própria assinatura e não a use para outras pessoas.
-- **Onde fica o login:** em `/data/ai-homes` (volume `opencontabil_data`), uma pasta por ferramenta. Ela é sensível como uma senha e não entra nas cópias do banco. **Desconectar** apaga a pasta.
-- **Modelo:** o Claude usa `sonnet` e o ChatGPT o padrão da sua conta. Para trocar, defina `AI_CLAUDE_MODEL` ou `AI_CODEX_MODEL` no `.env.docker`.
+- **Onde fica o login:** em `/data/ai-homes` (volume `opencontabil_data`), uma pasta por ferramenta. Ela é sensível como uma senha e não entra nas cópias do banco. **Desconectar** apaga a pasta. A chave do Gemini fica no banco (e nas cópias dele).
+- **Modelo:** o Claude usa `sonnet`, o ChatGPT o padrão da sua conta e o Gemini `gemini-flash-latest`. Para trocar, defina `AI_CLAUDE_MODEL`, `AI_CODEX_MODEL` ou `AI_GEMINI_MODEL` no `.env.docker`.
 
 ## Comandos do dia a dia
 

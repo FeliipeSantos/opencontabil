@@ -1,10 +1,12 @@
 import { Button, Flex, Modal, Skeleton, Tag } from 'antd';
-import { useState } from 'react';
+import { Sparkles } from 'lucide-react';
+import { useMemo, useState } from 'react';
 import styled from 'styled-components';
 
 import { errorMessage } from '@/core/api/client';
 import { useLoad } from '@/core/hooks/useLoad';
 import { ErrorState } from '@/core/ui';
+import { AiAnalysisPanel, type AiPanelApi } from '@/modules/intelligence/components/AiSummaryTab';
 import { reformaApi } from '@/modules/reforma/api';
 import { HintBadge } from '@/modules/reforma/components/HintBadge';
 import { currentVersionReason, FILE_STATUS, formatDate, formatDateTime, VERSION_HINTS } from '@/modules/reforma/format';
@@ -113,6 +115,32 @@ function VersionText({ documentId, version }: { documentId: string; version: Doc
   );
 }
 
+const Actions = styled(Flex)`
+  margin-top: 8px;
+`;
+
+const AnalysisBox = styled.div`
+  margin-top: 10px;
+  padding: 14px 16px;
+  border: 1px solid ${colors.border};
+  border-radius: ${radius.card}px;
+  background: ${colors.bgSubtle};
+`;
+
+/** "Análise IA" of a version: opened on click; the AI runs only when "Gerar" is clicked inside. */
+function VersionAnalysis({ documentId, versionId, open }: { documentId: string; versionId: string; open: boolean }) {
+  const api = useMemo<AiPanelApi>(
+    () => ({ get: () => reformaApi.versionAnalysis(documentId, versionId), request: () => reformaApi.requestVersionAnalysis(documentId, versionId) }),
+    [documentId, versionId],
+  );
+  if (!open) return null;
+  return (
+    <AnalysisBox>
+      <AiAnalysisPanel api={api} kind="analise" />
+    </AnalysisBox>
+  );
+}
+
 interface DocumentModalProps {
   documentId: string | null;
   sourceName: (id: string) => string;
@@ -124,6 +152,15 @@ interface DocumentModalProps {
 export function DocumentModal({ documentId, sourceName, kindName, onClose }: DocumentModalProps) {
   const state = useLoad(() => (documentId ? reformaApi.document(documentId) : Promise.resolve(undefined)), [documentId]);
   const doc = state.data;
+  // versões com a Análise IA aberta
+  const [openAnalyses, setOpenAnalyses] = useState<Set<string>>(() => new Set());
+  const toggleAnalysis = (id: string) =>
+    setOpenAnalyses((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
 
   return (
     <Modal
@@ -172,7 +209,11 @@ export function DocumentModal({ documentId, sourceName, kindName, onClose }: Doc
                     {version.label ?? 'Versão'}
                     {index === 0 && <HintBadge tone="info" label="Atual" heading="Versão atual" what={VERSION_HINTS.current} why={currentVersionReason(doc.versions.length)} />}
                     {file && <HintBadge tone={file.tone} label={file.label} what={file.hint} />}
-                    {version.analysisStatus === 'pending' && <HintBadge tone="neutral" label="Aguardando análise" what={VERSION_HINTS.pendingAnalysis} />}
+                    {version.analysisStatus === 'done' ? (
+                      <HintBadge tone="success" label="Analisada por IA" what={VERSION_HINTS.analysisDone} />
+                    ) : (
+                      <HintBadge tone="neutral" label="Sem análise IA" what={VERSION_HINTS.pendingAnalysis} />
+                    )}
                   </VersionHead>
                   <Small>
                     Detectada em {formatDateTime(version.detectedAt)}
@@ -187,7 +228,13 @@ export function DocumentModal({ documentId, sourceName, kindName, onClose }: Doc
                       </a>
                     </Small>
                   )}
-                  <VersionText documentId={doc.id} version={version} />
+                  <Actions gap={8} wrap align="flex-start">
+                    <VersionText documentId={doc.id} version={version} />
+                    <Button size="small" icon={<Sparkles size={13} aria-hidden />} onClick={() => toggleAnalysis(version.id)} aria-expanded={openAnalyses.has(version.id)}>
+                      {openAnalyses.has(version.id) ? 'Fechar análise IA' : 'Análise IA'}
+                    </Button>
+                  </Actions>
+                  <VersionAnalysis documentId={doc.id} versionId={version.id} open={openAnalyses.has(version.id)} />
                 </Version>
               );
             })}

@@ -1,3 +1,4 @@
+import type { AiSummaryState } from '@/modules/intelligence/components/AiSummaryTab';
 import { apiRequest } from '@/core/api/client';
 import type { CalendarEvent, DocumentDetail, DocumentFilters, DocumentPage, EventFilters, Status, SyncRun } from '@/modules/reforma/types';
 
@@ -35,4 +36,9 @@ export const reformaApi = {
   },
   versionText: (documentId: string, versionId: string) =>
     apiRequest<{ text: string }>(`${BASE}/documents/${encodeURIComponent(documentId)}/versions/${encodeURIComponent(versionId)}`).then((r) => r.text),
+  /** Análise IA of a version: read, or ask for it (made only when asked). */
+  versionAnalysis: (documentId: string, versionId: string) =>
+    apiRequest<AiSummaryState>(`${BASE}/documents/${encodeURIComponent(documentId)}/versions/${encodeURIComponent(versionId)}/analysis`),
+  requestVersionAnalysis: (documentId: string, versionId: string) =>
+    apiRequest<AiSummaryState>(`${BASE}/documents/${encodeURIComponent(documentId)}/versions/${encodeURIComponent(versionId)}/analysis`, { method: 'POST' }),
 };
