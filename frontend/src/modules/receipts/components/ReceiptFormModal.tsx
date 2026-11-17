@@ -229,7 +229,7 @@ export function ReceiptFormModal({ open, receipt, defaultClientId, clients, type
               <FullDatePicker format="DD/MM/YYYY" allowClear={false} />
             </Form.Item>
           </Col>
-          <Col xs={24} md={12}>
+          <Col xs={24} md={9}>
             <Form.Item label="Trabalho realizado" name="serviceTypeId" rules={[{ required: true, message: 'Escolha o trabalho realizado' }]}>
               <Select
                 showSearch
@@ -264,12 +264,12 @@ export function ReceiptFormModal({ open, receipt, defaultClientId, clients, type
               />
             </Form.Item>
           </Col>
-          <Col xs={24} md={6}>
+          <Col xs={24} md={8}>
             <Form.Item label="Competência" name="period" tooltip="Mês a que o serviço se refere (ex.: honorário de outubro)">
               <FullDatePicker picker="month" format="MM/YYYY" placeholder="mm/aaaa" />
             </Form.Item>
           </Col>
-          <Col xs={24} md={6}>
+          <Col xs={24} md={7}>
             <Form.Item label="Forma" name="method">
               <Select allowClear options={(Object.keys(PAYMENT_METHODS) as PaymentMethod[]).map((key) => ({ value: key, label: PAYMENT_METHODS[key] }))} />
             </Form.Item>
