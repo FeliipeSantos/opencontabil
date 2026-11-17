@@ -25,7 +25,7 @@ import { formatMoney } from '@/modules/clients/format';
 import type { Client } from '@/modules/clients/types';
 import { receiptsApi, serviceTypesApi } from '@/modules/receipts/api';
 import { ReceiptFormModal } from '@/modules/receipts/components/ReceiptFormModal';
-import { ReceivablesReport } from '@/modules/receipts/components/ReceivablesReport';
+import { ReceiptsReport, type ReportView } from '@/modules/receipts/components/ReceiptsReport';
 import { ServiceTypesModal } from '@/modules/receipts/components/ServiceTypesModal';
 import { balanceState, OTHER_SERVICE, PAYMENT_METHODS, serviceLabel, totals } from '@/modules/receipts/format';
 import type { Receipt, ReceiptInput, ReceiptListing, ServiceType } from '@/modules/receipts/types';
@@ -179,8 +179,8 @@ export function ReceiptsPage() {
   const [saving, setSaving] = useState(false);
   const [types, setTypes] = useState<ServiceType[]>([]);
   const [managingTypes, setManagingTypes] = useState(false);
-  /** undefined: report closed; null: all clients; a number: that client. */
-  const [report, setReport] = useState<number | null | undefined>(undefined);
+  /** Report opened from an indicator or a client balance (null: closed). */
+  const [report, setReport] = useState<ReportView | null>(null);
 
   useEffect(() => {
     clientsApi
@@ -314,8 +314,18 @@ export function ReceiptsPage() {
           value={value(formatMoney(sums.received))}
           small
           hint={`${items.length} lançamento${items.length === 1 ? '' : 's'}`}
+          onClick={listing ? () => setReport({ kind: 'month', metric: 'received', label: monthLabel, items }) : undefined}
+          ariaLabel={`Abrir o relatório do recebido em ${monthLabel}`}
         />
-        <StatCard icon={<FileTextOutlined />} iconTone="blue" label={`Cobrado em ${monthLabel}`} value={value(formatMoney(sums.charged))} small />
+        <StatCard
+          icon={<FileTextOutlined />}
+          iconTone="blue"
+          label={`Cobrado em ${monthLabel}`}
+          value={value(formatMoney(sums.charged))}
+          small
+          onClick={listing ? () => setReport({ kind: 'month', metric: 'charged', label: monthLabel, items }) : undefined}
+          ariaLabel={`Abrir o relatório do cobrado em ${monthLabel}`}
+        />
         <StatCard
           icon={<RiseOutlined />}
           iconTone="purple"
@@ -323,6 +333,8 @@ export function ReceiptsPage() {
           value={value(formatMoney(sums.credit))}
           small
           hint={sums.creditClients ? `${sums.creditClients} cliente${sums.creditClients > 1 ? 's' : ''} com crédito` : 'nenhum crédito'}
+          onClick={listing ? () => setReport({ kind: 'credit' }) : undefined}
+          ariaLabel="Abrir o relatório de créditos de clientes"
         />
         <StatCard
           icon={<ClockCircleOutlined />}
@@ -332,7 +344,7 @@ export function ReceiptsPage() {
           small
           tone={sums.open > 0 ? 'warning' : undefined}
           hint={sums.openClients ? `${sums.openClients} cliente${sums.openClients > 1 ? 's' : ''} em aberto` : 'nada em aberto'}
-          onClick={listing ? () => setReport(null) : undefined}
+          onClick={listing ? () => setReport({ kind: 'open' }) : undefined}
           ariaLabel="Abrir o relatório de valores a receber"
         />
       </StatsRow>
@@ -459,7 +471,7 @@ export function ReceiptsPage() {
                 const state = balanceState(b.balance);
                 return (
                   <BalanceRow key={b.clientId}>
-                    <button type="button" onClick={() => setReport(b.clientId)} title={`Abrir o relatório de ${b.name}`}>
+                    <button type="button" onClick={() => setReport({ kind: 'client', clientId: b.clientId })} title={`Abrir o relatório de ${b.name}`}>
                       <strong>{b.name}</strong>
                       <StatusBadge tone={state.tone}>{state.text}</StatusBadge>
                     </button>
@@ -484,15 +496,14 @@ export function ReceiptsPage() {
         onCancel={() => setEditing(null)}
       />
 
-      <ReceivablesReport
-        open={report !== undefined}
-        clientId={report ?? null}
+      <ReceiptsReport
+        view={report}
         reloadKey={reloadKey}
         onShowEntries={(id) => {
           setClientId(id);
-          setReport(undefined);
+          setReport(null);
         }}
-        onClose={() => setReport(undefined)}
+        onClose={() => setReport(null)}
       />
 
       <ServiceTypesModal open={managingTypes} types={types} onChange={changeTypes} onClose={() => setManagingTypes(false)} />
