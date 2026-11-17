@@ -46,7 +46,7 @@ const InlineField = styled.span<{ $onDark: boolean }>`
             background-color: rgba(255, 255, 255, 0.1);
           `
         : css`
-            background-color: #fff;
+            background-color: ${colors.bgCard};
           `}
 
     .ant-input-show-count-suffix {

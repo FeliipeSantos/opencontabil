@@ -27,7 +27,7 @@ interface SectionProps {
   onChange: (project: Project) => void;
 }
 
-// seletor de data sem caixa: mantém fonte e cor do relatório (inclusive sobre o cabeçalho escuro)
+// seletor de data sem caixa: mantém fonte e cor do relatório
 const DateField = styled.span`
   display: inline-block;
   border-radius: 4px;
@@ -88,11 +88,10 @@ export function ReportHeader({ project, editing, onChange }: SectionProps) {
     <ReportHeaderBar>
       <div>
         <ProjectName>
-          <EditableText value={project.name} editing={editing} field="projectName" ariaLabel="Nome do projeto" onDark onCommit={set('name')} />
+          <EditableText value={project.name} editing={editing} field="projectName" ariaLabel="Nome do projeto" onCommit={set('name')} />
         </ProjectName>
         <Flex align="center" gap={8}>
-          <StatusReportLabel>Status Report</StatusReportLabel>
-          <StatusReportLabel aria-hidden>•</StatusReportLabel>
+          <StatusReportLabel>Status report de</StatusReportLabel>
           <ReportDate>
             <DateValue value={project.reportDate} editing={editing} label="Data do relatório" onChange={set('reportDate')} />
           </ReportDate>
@@ -125,7 +124,7 @@ export function InfoCards({ project, editing, onChange }: SectionProps) {
       <InfoCard>
         <CardLabel>
           <Dot />
-          Descrição do Projeto
+          Descrição do projeto
         </CardLabel>
         <CardText>
           <EditableText value={project.description ?? ''} editing={editing} field="projectDescription" multiline ariaLabel="Descrição do projeto" onCommit={set('description')} />

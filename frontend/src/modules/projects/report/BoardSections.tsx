@@ -23,9 +23,9 @@ interface SectionProps {
 }
 
 const ATTENTION_CARDS: { key: ActivityListKey; title: string; accent: Accent }[] = [
-  { key: 'attentionPoints', title: 'Pontos de Atenção', accent: 'blue' },
-  { key: 'projectImpacts', title: 'Impactos no Projeto', accent: 'green' },
-  { key: 'actionPlans', title: 'Planos de Ação', accent: 'orange' },
+  { key: 'attentionPoints', title: 'Pontos de atenção', accent: 'blue' },
+  { key: 'projectImpacts', title: 'Impactos no projeto', accent: 'green' },
+  { key: 'actionPlans', title: 'Planos de ação', accent: 'orange' },
 ];
 
 /** The three lists of the selected activity: attention points, impacts and action plans. */
@@ -61,9 +61,9 @@ export function AttentionCards({ project, editing, onChange, activity }: Section
 }
 
 const KANBAN_COLUMNS: { key: KanbanColumn; title: string; color: string }[] = [
-  { key: 'done', title: 'DONE', color: colors.green },
-  { key: 'doing', title: 'DOING', color: colors.orange },
-  { key: 'todo', title: 'TO DO', color: colors.navy },
+  { key: 'done', title: 'Concluído', color: colors.green },
+  { key: 'doing', title: 'Em andamento', color: colors.orange },
+  { key: 'todo', title: 'A fazer', color: colors.blue },
 ];
 
 export function KanbanBoard({ project, editing, onChange }: SectionProps) {
