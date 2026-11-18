@@ -28,6 +28,11 @@ const Shell = styled.div`
   display: flex;
   flex-direction: column;
   background: ${colors.bgApp};
+
+  /* papel branco: sem o fundo do app em volta das folhas */
+  @media print {
+    background: #fff;
+  }
 `;
 
 // min-width 0: tabelas e o relatório largos rolam dentro da área, sem empurrar a página

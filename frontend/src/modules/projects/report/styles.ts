@@ -171,6 +171,11 @@ export const MiddleRow = styled.div`
   grid-template-columns: 1.5fr 1fr;
   gap: 16px;
   align-items: stretch;
+
+  /* no PDF as subatividades ficam no detalhamento: a tabela de atividades ocupa a linha toda */
+  @media print {
+    grid-template-columns: minmax(0, 1fr);
+  }
 `;
 
 export const MiddleCard = styled.div`
@@ -462,6 +467,10 @@ export const EmptyBox = styled.div`
 export const SubActivitiesColumn = styled.div`
   position: relative;
   min-height: 260px;
+
+  @media print {
+    display: none;
+  }
 
   > * {
     position: absolute;

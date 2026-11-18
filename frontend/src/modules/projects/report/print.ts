@@ -5,7 +5,7 @@
  */
 import { PRINT_PAGE_HEIGHT, PRINT_PAGE_WIDTH } from '@/modules/projects/report/styles';
 
-const BASE_ZOOM = 0.73; // escala que já cabe numa folha A4 paisagem
+export const BASE_ZOOM = 0.73; // escala que já cabe numa folha A4 paisagem
 const MIN_ZOOM = 0.4; // abaixo disso o texto fica ilegível: a página passa para outra folha
 
 export function computePrintZoom(naturalHeight: number): number {
