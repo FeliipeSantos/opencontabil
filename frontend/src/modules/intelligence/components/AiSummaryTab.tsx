@@ -94,11 +94,54 @@ const KIND: Record<AiSummary['tipo'], string> = {
   outro: 'Outro',
 };
 
-const CONFIDENCE: Record<AiSummary['confianca'], { label: string; color: string }> = {
-  alta: { label: 'Confiança alta', color: 'green' },
-  media: { label: 'Confiança média', color: 'gold' },
-  baixa: { label: 'Confiança baixa', color: 'red' },
+// o que cada nível quer dizer (mostrado ao passar o mouse, junto do motivo dado pela IA)
+const CONFIDENCE: Record<AiSummary['confianca'], { label: string; color: string; meaning: string }> = {
+  alta: {
+    label: 'Confiança alta',
+    color: 'green',
+    meaning: 'O texto enviado à IA traz as regras, quem é afetado e os prazos; quase tudo no resumo sai do próprio texto oficial.',
+  },
+  media: {
+    label: 'Confiança média',
+    color: 'gold',
+    meaning: 'O texto cobre o principal, mas falta algum detalhe; parte do resumo vem do conhecimento geral da IA.',
+  },
+  baixa: {
+    label: 'Confiança baixa',
+    color: 'red',
+    meaning:
+      'O texto disponível é curto ou incompleto (por exemplo, só a notícia, sem o ato oficial); boa parte do resumo vem do conhecimento geral da IA. Confira na fonte oficial.',
+  },
 };
+
+/** How many points of the summary come from the official text ("fonte") out of all points. */
+function pointsFromSource(summary: Pick<AiSummary, 'quem_e_afetado' | 'quem_nao_e_afetado' | 'o_que_muda' | 'o_que_fazer' | 'prazos' | 'vigencia'>) {
+  const points = [
+    ...summary.quem_e_afetado,
+    ...summary.quem_nao_e_afetado,
+    ...summary.o_que_muda,
+    ...summary.o_que_fazer,
+    ...summary.prazos,
+    ...(summary.vigencia ? [summary.vigencia] : []),
+  ];
+  return { fromSource: points.filter((p) => p.origem === 'fonte').length, total: points.length };
+}
+
+const ConfidenceTag = styled(Tag)`
+  cursor: help;
+`;
+
+const ConfidenceTip = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12.5px;
+  line-height: 1.45;
+
+  strong {
+    font-weight: 600;
+  }
+`;
 
 const Box = styled.div`
   display: flex;
@@ -205,11 +248,33 @@ function Points({ title, points }: { title: string; points: AiPoint[] }) {
 function SummaryView({ state, kind }: { state: AiSummaryState & { summary: AiSummary }; kind: PanelKind }) {
   const { summary } = state;
   const confidence = CONFIDENCE[summary.confianca];
+  const sources = pointsFromSource(summary);
   return (
     <Box>
       <Flex gap={6} wrap>
         <Tag>{KIND[summary.tipo]}</Tag>
-        <Tag color={confidence.color}>{confidence.label}</Tag>
+        <Tooltip
+          placement="bottomLeft"
+          title={
+            <ConfidenceTip>
+              <span>{confidence.meaning}</span>
+              {summary.motivo_confianca && (
+                <span>
+                  <strong>Neste resumo:</strong> {summary.motivo_confianca}
+                </span>
+              )}
+              {sources.total > 0 && (
+                <span>
+                  {sources.fromSource} de {sources.total} {sources.total === 1 ? 'ponto vem' : 'pontos vêm'} do texto oficial; os demais são contexto da IA.
+                </span>
+              )}
+            </ConfidenceTip>
+          }
+        >
+          <ConfidenceTag color={confidence.color} tabIndex={0}>
+            {confidence.label}
+          </ConfidenceTag>
+        </Tooltip>
       </Flex>
       {summary.do_que_se_trata && <Lead>{summary.do_que_se_trata}</Lead>}
       {state.outdated && <Alert type="warning" showIcon message={TEXTS[kind].outdated} />}
