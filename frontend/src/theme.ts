@@ -342,6 +342,12 @@ function buildAntdTheme(scheme: Scheme, dark: boolean): ThemeConfig {
       Select: {
         optionSelectedBg: c.blueSelected,
       },
+      // item selecionado dos menus suspensos (ex.: módulo aberto num grupo do topo): mesmas cores da pílula do topo
+      Dropdown: {
+        colorPrimary: t.info.fg,
+        controlItemBgActive: c.blueSelected,
+        controlItemBgActiveHover: c.blueSelected,
+      },
       Tabs: {
         itemColor: c.textMuted,
         itemSelectedColor: c.navy,
