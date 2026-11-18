@@ -10,6 +10,10 @@ from app.modules.intelligence.text import clean_text, decode_entities, html_to_t
 
 # Páginas de notícia abertas por execução para ler o horário (só itens novos)
 MAX_ARTICLE_PAGES_PER_RUN = 20
+# Listagem do gov.br: 30 notícias por página (?b_start:int=30, 60...). Depois de dias sem
+# coleta, a primeira página não chega à data de retomada: segue até 10 páginas (300 notícias)
+NEWS_PAGE_SIZE = 30
+MAX_LIST_PAGES = 10
 
 _LINK = re.compile(r'\s*<a href="([^"]+)"[^>]*>([\s\S]*?)</a>')
 _DESCRIPTION = re.compile(r'<span class="descricao">([\s\S]*?)</span>\s*(?:<div|</div>)')
@@ -77,8 +81,27 @@ def news_collector(list_url: str, organ: str) -> Callable[[CollectContext], list
     """Collector for a gov.br news listing URL."""
 
     def collect(ctx: CollectContext) -> list[dict]:
-        listed = parse_news_list(ctx.fetch_text(list_url), organ)
-        items = [item for item in listed if not item["publishedAt"] or item["publishedAt"] >= ctx.since]
+        items: list[dict] = []
+        seen: set[str] = set()
+        for page in range(MAX_LIST_PAGES):
+            url = list_url if page == 0 else f"{list_url}?b_start:int={page * NEWS_PAGE_SIZE}"
+            try:
+                listed = parse_news_list(ctx.fetch_text(url), organ)
+            except Exception:
+                # a primeira página falhar é falha da fonte; as seguintes só encerram a busca
+                if page == 0:
+                    raise
+                break
+            for item in listed:
+                # a mesma notícia pode reaparecer na página seguinte se outra entrar no topo
+                if item["externalId"] in seen or (item["publishedAt"] and item["publishedAt"] < ctx.since):
+                    continue
+                seen.add(item["externalId"])
+                items.append(item)
+            dates = [item["publishedAt"] for item in listed if item["publishedAt"]]
+            # última página, ou a página já chegou antes da data de retomada
+            if len(listed) < NEWS_PAGE_SIZE or (dates and min(dates) < ctx.since):
+                break
         return add_published_times(items, ctx)
 
     return collect
