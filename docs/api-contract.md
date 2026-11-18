@@ -116,6 +116,18 @@ Serviços externos da instalação, em Ajustes > Integrações. O Assistente de 
 - **`login.state`:** `starting`, `waiting` (esperando a pessoa na página), `checking`, `success`, `failed` (com `message`) ou `canceled`. A tela consulta o status a cada 2 segundos enquanto o login está aberto.
 - **Uma pessoa:** é para usar só a própria assinatura. Os termos da Anthropic permitem entrar no Claude Code oficial com a própria assinatura, mas não oferecer esse login a outras pessoas; a OpenAI indica o login do ChatGPT para "trusted runners" (máquinas de confiança).
 
+### Módulos: `/api/modules`
+
+| Rota | Resposta |
+|---|---|
+| `GET /api/modules` | `{ disabled: [...] }`: módulos desligados em Ajustes > Módulos (vale para a instalação toda) |
+| `PUT /api/modules` | Corpo `{ "disabled": [...] }` com as chaves `clients`, `receipts`, `das`, `intelligence`, `reforma` e `projects`. Devolve o mesmo formato. `400 Módulo inválido` para outra chave. A Visão Geral fica sempre ligada |
+
+- **Módulo desligado:** sai do menu e da Visão Geral; a tela mostra que está desativado; a API dele responde `403 Módulo desativado em Ajustes > Módulos`.
+- **APIs de cada módulo:** `receipts` (`/api/clients/receipts` e `/api/clients/service-types`), `das` (`/api/clients/das`), `intelligence`, `reforma`, `projects` e `clients` (`/api/clients`). Com Clientes desligado, a lista (`GET`) continua respondendo, porque Recebimentos e DAS a usam; só as alterações são bloqueadas.
+- **Coletas:** com Publicações ou Calendário desligado, `flask intel scheduled` e `flask reforma scheduled` não rodam a coleta diária. A coleta manual também fica bloqueada pela API.
+- **No banco:** `core_settings`, chave `modules.disabled`. Os dados dos módulos são mantidos.
+
 ## 5. Portal de Projetos: `/api/projects`
 
 | Rota | Resposta |

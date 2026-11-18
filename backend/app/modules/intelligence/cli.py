@@ -14,6 +14,7 @@ from datetime import datetime
 import click
 from flask.cli import AppGroup
 
+from app.core import modules
 from app.modules.intelligence import fulltext, http_client, monitor, repository, scheduler
 from app.modules.intelligence.catalog import SOURCES
 from app.modules.intelligence.collectors import CollectContext, registry
@@ -52,6 +53,9 @@ def run_command() -> None:
 def scheduled_command() -> None:
     if not scheduler.is_scheduler_enabled():
         click.echo("Coleta automática desligada (INTEL_SCHEDULER=off).")
+        return
+    if not modules.is_enabled("intelligence"):
+        # módulo desligado em Ajustes > Módulos: sem coleta (silencioso, o timer roda a cada 5 minutos)
         return
     if not scheduler.is_due(repository.schedule_data(), datetime.now().astimezone()):
         return

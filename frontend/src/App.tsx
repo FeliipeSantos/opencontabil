@@ -5,6 +5,8 @@ import styled from 'styled-components';
 import { useAuth } from '@/core/auth/authContext';
 import { LoginPage } from '@/core/auth/LoginPage';
 import { AppLayout } from '@/core/layout/AppLayout';
+import { HomeRedirect } from '@/core/modules/ModuleGate';
+import { ModulesProvider } from '@/core/modules/ModulesProvider';
 import { settingsRoutes } from '@/core/settings/routes';
 import { MODULES } from '@/modules';
 
@@ -21,7 +23,8 @@ const router = createHashRouter([
     path: '/',
     element: <AppLayout />,
     children: [
-      { index: true, element: <Navigate to={MODULES[0].path} replace /> },
+      // página inicial: o primeiro módulo ligado em Ajustes > Módulos
+      { index: true, element: <HomeRedirect /> },
       ...MODULES.flatMap((m) => m.routes),
       // telas do sistema (não são módulos da navegação)
       ...settingsRoutes,
@@ -43,5 +46,9 @@ export function App() {
   if (session.status === 'anonymous') {
     return <LoginPage notice={session.notice} />;
   }
-  return <RouterProvider router={router} future={{ v7_startTransition: true }} />;
+  return (
+    <ModulesProvider>
+      <RouterProvider router={router} future={{ v7_startTransition: true }} />
+    </ModulesProvider>
+  );
 }

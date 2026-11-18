@@ -12,6 +12,7 @@ from datetime import datetime
 import click
 from flask.cli import AppGroup
 
+from app.core import modules
 from app.extensions import db
 from app.modules.intelligence import http_client
 from app.modules.reforma import monitor, repository, scheduler
@@ -58,6 +59,9 @@ def run_command(backfill: bool) -> None:
 def scheduled_command() -> None:
     if not scheduler.is_enabled():
         click.echo("Sincronização automática desligada (REFORMA_SCHEDULER=off).")
+        return
+    if not modules.is_enabled("reforma"):
+        # módulo desligado em Ajustes > Módulos: sem coleta (silencioso, o timer roda a cada 5 minutos)
         return
     if not scheduler.is_due(repository.schedule_data(), datetime.now().astimezone()):
         return

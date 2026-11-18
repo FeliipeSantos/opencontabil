@@ -1,4 +1,5 @@
 import type { NotificationGroup } from '@/core/layout/notifications';
+import { useModules } from '@/core/modules/modulesContext';
 import { useCriticalNotifications } from '@/modules/intelligence/hooks/useCriticalNotifications';
 import { useCalendarNotifications } from '@/modules/reforma/hooks/useCalendarNotifications';
 
@@ -7,7 +8,9 @@ import { useCalendarNotifications } from '@/modules/reforma/hooks/useCalendarNot
  * adds its hook here; the header shows the groups in this order.
  */
 export function useModuleNotifications(): NotificationGroup[] {
-  const critical = useCriticalNotifications();
-  const calendar = useCalendarNotifications();
+  // módulo desligado em Ajustes > Módulos não consulta nem avisa
+  const { isEnabled } = useModules();
+  const critical = useCriticalNotifications(isEnabled('intelligence'));
+  const calendar = useCalendarNotifications(isEnabled('reforma'));
   return [critical, calendar].filter((group): group is NotificationGroup => group !== null);
 }

@@ -16,6 +16,7 @@ import styled from 'styled-components';
 
 import { errorMessage, SessionExpiredError } from '@/core/api/client';
 import { Page } from '@/core/layout/Page';
+import { MODULES_SETTINGS_PATH, useModules } from '@/core/modules/modulesContext';
 import { LoadingState, SectionCard, StatCard, StatGrid, StatusBadge } from '@/core/ui';
 import { formatMoney } from '@/modules/clients/format';
 import { dasApi } from '@/modules/das/api';
@@ -51,9 +52,11 @@ interface Block<T> {
   error: string | null;
 }
 
-function useBlock<T>(load: () => Promise<T>): Block<T> {
+// módulo desligado em Ajustes > Módulos: o quadro nem consulta a API (que responderia 403)
+function useBlock<T>(load: () => Promise<T>, enabled = true): Block<T> {
   const [state, setState] = useState<Block<T>>({ data: null, error: null });
   useEffect(() => {
+    if (!enabled) return undefined;
     let active = true;
     load()
       .then((data) => active && setState({ data, error: null }))
@@ -66,9 +69,10 @@ function useBlock<T>(load: () => Promise<T>): Block<T> {
   return state;
 }
 
-const Columns = styled.div`
+// uma coluna só quando um dos lados ficou sem quadros (módulos desligados)
+const Columns = styled.div<{ $single: boolean }>`
   display: grid;
-  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+  grid-template-columns: ${({ $single }) => ($single ? 'minmax(0, 1fr)' : 'minmax(0, 1.4fr) minmax(0, 1fr)')};
   gap: 16px;
   align-items: start;
 
@@ -217,18 +221,31 @@ export function OverviewPage() {
   const cardEnd = dayjs(today).add(CARD_DAYS, 'day').format('YYYY-MM-DD');
   const publicationsFrom = useMemo(() => dayjs(today).subtract(RECENT_PUBLICATION_DAYS, 'day').format('YYYY-MM-DD'), [today]);
 
-  const receipts = useBlock<ReceiptListing>(() => receiptsApi.list());
-  const events = useBlock<CalendarEvent[]>(() => reformaApi.events(today, listEnd, { hidePublications: true }));
-  const das = useBlock<DasListing>(() => dasApi.list(dasPeriod));
-  const projects = useBlock<Project[]>(() => listProjects());
-  const publications = useBlock<Publication[]>(() =>
-    Promise.all([intelligenceApi.publications({ relevance: 'critica', from: publicationsFrom }), intelligenceApi.publications({ relevance: 'alta', from: publicationsFrom })]).then(
-      ([critical, high]) => [...critical.items, ...high.items],
-    ),
+  // cada quadro só aparece com o seu módulo ligado em Ajustes > Módulos
+  const { isEnabled } = useModules();
+  const on = {
+    receipts: isEnabled('receipts'),
+    reforma: isEnabled('reforma'),
+    intelligence: isEnabled('intelligence'),
+    das: isEnabled('das'),
+    projects: isEnabled('projects'),
+  };
+  const receipts = useBlock<ReceiptListing>(() => receiptsApi.list(), on.receipts);
+  const events = useBlock<CalendarEvent[]>(() => reformaApi.events(today, listEnd, { hidePublications: true }), on.reforma);
+  const das = useBlock<DasListing>(() => dasApi.list(dasPeriod), on.das);
+  const projects = useBlock<Project[]>(() => listProjects(), on.projects);
+  const publications = useBlock<Publication[]>(
+    () =>
+      Promise.all([intelligenceApi.publications({ relevance: 'critica', from: publicationsFrom }), intelligenceApi.publications({ relevance: 'alta', from: publicationsFrom })]).then(
+        ([critical, high]) => [...critical.items, ...high.items],
+      ),
+    on.intelligence,
   );
-  const changed = useBlock<DocumentPage>(() => reformaApi.documents({ changed: 'versions' }));
+  const changed = useBlock<DocumentPage>(() => reformaApi.documents({ changed: 'versions' }), on.reforma);
   // nomes das fontes e tipos, usados pelo cartão do prazo
-  const calendarStatus = useBlock<Status>(() => reformaApi.status());
+  const calendarStatus = useBlock<Status>(() => reformaApi.status(), on.reforma);
+  const leftVisible = on.reforma;
+  const rightVisible = on.receipts || on.das || on.projects || on.reforma || on.intelligence;
   const [openEvent, setOpenEvent] = useState<CalendarEvent | null>(null);
 
   const open = receipts.data ? openTotals(receipts.data.balances) : null;
@@ -255,261 +272,291 @@ export function OverviewPage() {
   return (
     <Page icon={<AppstoreOutlined />} title="Visão Geral" description="O que pede atenção hoje: valores a receber, prazos, pendências e novidades.">
       <StatGrid $min={220}>
-        <StatCard
-          icon={<ClockCircleOutlined />}
-          iconTone="orange"
-          label="A receber"
-          value={value(open ? formatMoney(open.amount) : null)}
-          tone={open && open.amount > 0 ? 'warning' : undefined}
-          hint={open ? (open.clients ? `${open.clients} cliente${open.clients > 1 ? 's' : ''} em aberto` : 'nada em aberto') : undefined}
-          small
-          onClick={() => navigate(RECEIPTS_PATH)}
-          ariaLabel="Abrir Recebimentos"
-        />
-        <StatCard
-          icon={<WalletOutlined />}
-          iconTone="green"
-          label={`Recebido em ${dayjs(today).format('MMMM')}`}
-          value={value(thisMonth ? formatMoney(thisMonth.received) : null)}
-          hint={thisMonth ? `de ${formatMoney(thisMonth.charged)} cobrados` : undefined}
-          small
-          onClick={() => navigate(RECEIPTS_PATH)}
-          ariaLabel="Abrir Recebimentos"
-        />
-        <StatCard
-          icon={<CalendarOutlined />}
-          iconTone="blue"
-          label={`Prazos nos próximos ${CARD_DAYS} dias`}
-          value={value(events.data ? dueSoon.length : null)}
-          tone={dueSoon.length > 0 ? 'warning' : undefined}
-          hint={events.data ? (dueSoon[0] ? `o primeiro ${relativeDay(dueSoon[0].date, today)}` : 'nenhum prazo na semana') : undefined}
-          small
-          onClick={() => navigate(`${CALENDAR_PATH}?aba=painel`)}
-          ariaLabel="Abrir o painel do Calendário"
-        />
-        <StatCard
-          icon={<NotificationOutlined />}
-          iconTone="red"
-          label="Publicações críticas"
-          value={value(publications.data ? groupSameAct(critical).length : null)}
-          tone={critical.length > 0 ? 'danger' : undefined}
-          hint={`nos últimos ${RECENT_PUBLICATION_DAYS} dias`}
-          small
-          onClick={() => navigate(publicationsPath({ relevance: 'critica', from: publicationsFrom }))}
-          ariaLabel="Abrir as publicações críticas"
-        />
+        {on.receipts && (
+          <StatCard
+            icon={<ClockCircleOutlined />}
+            iconTone="orange"
+            label="A receber"
+            value={value(open ? formatMoney(open.amount) : null)}
+            tone={open && open.amount > 0 ? 'warning' : undefined}
+            hint={open ? (open.clients ? `${open.clients} cliente${open.clients > 1 ? 's' : ''} em aberto` : 'nada em aberto') : undefined}
+            small
+            onClick={() => navigate(RECEIPTS_PATH)}
+            ariaLabel="Abrir Recebimentos"
+          />
+        )}
+        {on.receipts && (
+          <StatCard
+            icon={<WalletOutlined />}
+            iconTone="green"
+            label={`Recebido em ${dayjs(today).format('MMMM')}`}
+            value={value(thisMonth ? formatMoney(thisMonth.received) : null)}
+            hint={thisMonth ? `de ${formatMoney(thisMonth.charged)} cobrados` : undefined}
+            small
+            onClick={() => navigate(RECEIPTS_PATH)}
+            ariaLabel="Abrir Recebimentos"
+          />
+        )}
+        {on.reforma && (
+          <StatCard
+            icon={<CalendarOutlined />}
+            iconTone="blue"
+            label={`Prazos nos próximos ${CARD_DAYS} dias`}
+            value={value(events.data ? dueSoon.length : null)}
+            tone={dueSoon.length > 0 ? 'warning' : undefined}
+            hint={events.data ? (dueSoon[0] ? `o primeiro ${relativeDay(dueSoon[0].date, today)}` : 'nenhum prazo na semana') : undefined}
+            small
+            onClick={() => navigate(`${CALENDAR_PATH}?aba=painel`)}
+            ariaLabel="Abrir o painel do Calendário"
+          />
+        )}
+        {on.intelligence && (
+          <StatCard
+            icon={<NotificationOutlined />}
+            iconTone="red"
+            label="Publicações críticas"
+            value={value(publications.data ? groupSameAct(critical).length : null)}
+            tone={critical.length > 0 ? 'danger' : undefined}
+            hint={`nos últimos ${RECENT_PUBLICATION_DAYS} dias`}
+            small
+            onClick={() => navigate(publicationsPath({ relevance: 'critica', from: publicationsFrom }))}
+            ariaLabel="Abrir as publicações críticas"
+          />
+        )}
       </StatGrid>
 
-      <Columns>
-        <Stack>
-          <SectionCard
-            title={
-              <CardTitle>
-                <CalendarOutlined /> Próximos prazos
-              </CardTitle>
-            }
-            extra={<LinkButton onClick={() => navigate(CALENDAR_PATH)}>Abrir calendário</LinkButton>}
-            flush
-          >
-            <BlockBody block={events} rows={5}>
-              {() =>
-                upcoming.length === 0 ? (
-                  <Empty>Nada no calendário nos próximos {LIST_DAYS} dias.</Empty>
-                ) : (
-                  <List>
-                    {upcoming.slice(0, 12).map((event) => {
-                      const group = KIND_GROUPS[kindGroup(event.kind)];
-                      return (
-                        <Item key={event.id}>
-                          <button type="button" onClick={() => setOpenEvent(event)}>
-                            <DateBox $today={event.date === today}>
-                              <strong>{event.date.slice(8, 10)}</strong>
-                              <span>{dayjs(event.date).format('MMM')}</span>
-                            </DateBox>
+      {!leftVisible && !rightVisible && (
+        <Empty>
+          Nenhum módulo ligado para resumir aqui. Ligue os módulos em{' '}
+          <LinkButton onClick={() => navigate(MODULES_SETTINGS_PATH)}>Ajustes &gt; Módulos</LinkButton>.
+        </Empty>
+      )}
+      <Columns $single={!leftVisible || !rightVisible}>
+        {leftVisible && (
+          <Stack>
+            {on.reforma && (
+              <SectionCard
+                title={
+                  <CardTitle>
+                    <CalendarOutlined /> Próximos prazos
+                  </CardTitle>
+                }
+                extra={<LinkButton onClick={() => navigate(CALENDAR_PATH)}>Abrir calendário</LinkButton>}
+                flush
+              >
+                <BlockBody block={events} rows={5}>
+                  {() =>
+                    upcoming.length === 0 ? (
+                      <Empty>Nada no calendário nos próximos {LIST_DAYS} dias.</Empty>
+                    ) : (
+                      <List>
+                        {upcoming.slice(0, 12).map((event) => {
+                          const group = KIND_GROUPS[kindGroup(event.kind)];
+                          return (
+                            <Item key={event.id}>
+                              <button type="button" onClick={() => setOpenEvent(event)}>
+                                <DateBox $today={event.date === today}>
+                                  <strong>{event.date.slice(8, 10)}</strong>
+                                  <span>{dayjs(event.date).format('MMM')}</span>
+                                </DateBox>
+                                <Texts>
+                                  <Title title={eventSubject(event.title)}>{eventSubject(event.title)}</Title>
+                                  <Sub>
+                                    {relativeDay(event.date, today).replace(/^./, (c) => c.toUpperCase())} · {event.document.title}
+                                  </Sub>
+                                </Texts>
+                                <KindTag color={TAG_COLOR[group.tone]}>{group.label}</KindTag>
+                              </button>
+                            </Item>
+                          );
+                        })}
+                      </List>
+                    )
+                  }
+                </BlockBody>
+              </SectionCard>
+            )}
+          </Stack>
+        )}
+
+        {rightVisible && (
+          <Stack>
+            {on.receipts && (
+              <SectionCard
+                title={
+                  <CardTitle>
+                    <WalletOutlined /> Em aberto há mais tempo
+                  </CardTitle>
+                }
+                extra={<LinkButton onClick={() => navigate(RECEIPTS_PATH)}>Recebimentos</LinkButton>}
+                flush
+              >
+                <BlockBody block={receipts}>
+                  {(data) => {
+                    const clients = oldestOpenClients(data.items, data.balances);
+                    return clients.length === 0 ? (
+                      <Empty>Nenhum cliente com valor em aberto.</Empty>
+                    ) : (
+                      <List>
+                        {clients.map((c) => (
+                          <Item key={c.clientId}>
+                            <button type="button" onClick={() => navigate(RECEIPTS_PATH)}>
+                              <Texts>
+                                <Title title={c.name}>{c.name}</Title>
+                                <Sub>{c.since ? `em aberto desde ${formatDate(c.since)} (${relativeDay(c.since, today)})` : 'em aberto'}</Sub>
+                              </Texts>
+                              <StatusBadge tone="warning">
+                                <Money>{formatMoney(c.amount)}</Money>
+                              </StatusBadge>
+                            </button>
+                          </Item>
+                        ))}
+                      </List>
+                    );
+                  }}
+                </BlockBody>
+              </SectionCard>
+            )}
+
+            {on.das && (
+              <SectionCard
+                title={
+                  <CardTitle>
+                    <FileDoneOutlined /> DAS de {periodLabel(dasPeriod)}
+                  </CardTitle>
+                }
+                extra={<LinkButton onClick={() => navigate(DAS_PATH)}>Geração de DAS</LinkButton>}
+                flush
+              >
+                <BlockBody block={das} rows={2}>
+                  {(data) => {
+                    const counts = dasCounts(data.items);
+                    if (counts.total === 0) return <Empty>Nenhum cliente MEI ativo.</Empty>;
+                    return (
+                      <List>
+                        <Item>
+                          <button type="button" onClick={() => navigate(DAS_PATH)}>
                             <Texts>
-                              <Title title={eventSubject(event.title)}>{eventSubject(event.title)}</Title>
+                              <Title>{counts.pending ? `${counts.pending} de ${counts.total} sem guia gerada` : 'Todas as guias foram geradas'}</Title>
                               <Sub>
-                                {relativeDay(event.date, today).replace(/^./, (c) => c.toUpperCase())} · {event.document.title}
+                                vence em {formatDate(data.dueDate)} ({relativeDay(data.dueDate, today)})
+                                {counts.unpaid ? ` · ${counts.unpaid} gerada${counts.unpaid > 1 ? 's' : ''} sem pagamento` : ''}
                               </Sub>
                             </Texts>
-                            <KindTag color={TAG_COLOR[group.tone]}>{group.label}</KindTag>
+                            <StatusBadge tone={counts.pending ? 'warning' : 'success'}>{counts.pending ? 'Pendente' : 'Em dia'}</StatusBadge>
                           </button>
                         </Item>
-                      );
-                    })}
-                  </List>
-                )
-              }
-            </BlockBody>
-          </SectionCard>
+                      </List>
+                    );
+                  }}
+                </BlockBody>
+              </SectionCard>
+            )}
 
-          <SectionCard
-            title={
-              <CardTitle>
-                <NotificationOutlined /> Publicações relevantes
-              </CardTitle>
-            }
-            extra={<LinkButton onClick={() => navigate(publicationsPath({ from: publicationsFrom }))}>Ver todas</LinkButton>}
-            flush
-          >
-            <BlockBody block={publications}>
-              {() =>
-                recentPublications.length === 0 ? (
-                  <Empty>Nenhuma publicação crítica ou alta nos últimos {RECENT_PUBLICATION_DAYS} dias.</Empty>
-                ) : (
-                  <List>
-                    {recentPublications.map((pub) => (
-                      <Item key={pub.id}>
-                        <button type="button" onClick={() => navigate(publicationsPath({}), { state: { openPublication: pub } })}>
-                          <Texts>
-                            <Title title={pub.title}>{pub.title}</Title>
-                            <Sub>{[pub.publishedAt && formatPublicationDate(pub.publishedAt), pub.organ || pub.actType].filter(Boolean).join(' · ')}</Sub>
-                          </Texts>
-                          <StatusBadge tone={RELEVANCE[pub.relevance].tone}>{RELEVANCE[pub.relevance].label}</StatusBadge>
-                        </button>
-                      </Item>
-                    ))}
-                  </List>
-                )
-              }
-            </BlockBody>
-          </SectionCard>
-        </Stack>
+            {on.projects && (
+              <SectionCard
+                title={
+                  <CardTitle>
+                    <ProjectOutlined /> Projetos
+                  </CardTitle>
+                }
+                extra={<LinkButton onClick={() => navigate('/projetos')}>Portal de Projetos</LinkButton>}
+                flush
+              >
+                <BlockBody block={projects} rows={2}>
+                  {() =>
+                    projectDeadlines.length === 0 ? (
+                      <Empty>Nenhum projeto atrasado ou terminando nesta semana.</Empty>
+                    ) : (
+                      <List>
+                        {projectDeadlines.slice(0, LIST_LIMIT).map(({ project, deadline }) => (
+                          <Item key={project.id}>
+                            <button type="button" onClick={() => navigate(`/projetos/${encodeURIComponent(project.id)}`)}>
+                              <Texts>
+                                <Title title={project.name}>{project.name}</Title>
+                                <Sub>{deadline.label}</Sub>
+                              </Texts>
+                              <StatusBadge tone={deadline.tone}>{deadlineChip(deadline)}</StatusBadge>
+                            </button>
+                          </Item>
+                        ))}
+                      </List>
+                    )
+                  }
+                </BlockBody>
+              </SectionCard>
+            )}
 
-        <Stack>
-          <SectionCard
-            title={
-              <CardTitle>
-                <WalletOutlined /> Em aberto há mais tempo
-              </CardTitle>
-            }
-            extra={<LinkButton onClick={() => navigate(RECEIPTS_PATH)}>Recebimentos</LinkButton>}
-            flush
-          >
-            <BlockBody block={receipts}>
-              {(data) => {
-                const clients = oldestOpenClients(data.items, data.balances);
-                return clients.length === 0 ? (
-                  <Empty>Nenhum cliente com valor em aberto.</Empty>
-                ) : (
-                  <List>
-                    {clients.map((c) => (
-                      <Item key={c.clientId}>
-                        <button type="button" onClick={() => navigate(RECEIPTS_PATH)}>
-                          <Texts>
-                            <Title title={c.name}>{c.name}</Title>
-                            <Sub>{c.since ? `em aberto desde ${formatDate(c.since)} (${relativeDay(c.since, today)})` : 'em aberto'}</Sub>
-                          </Texts>
-                          <StatusBadge tone="warning">
-                            <Money>{formatMoney(c.amount)}</Money>
-                          </StatusBadge>
-                        </button>
-                      </Item>
-                    ))}
-                  </List>
-                );
-              }}
-            </BlockBody>
-          </SectionCard>
+            {on.reforma && (
+              <SectionCard
+                title={
+                  <CardTitle>
+                    <FileSyncOutlined /> Documentos alterados
+                  </CardTitle>
+                }
+                extra={<LinkButton onClick={() => navigate(`${CALENDAR_PATH}?aba=documentos`)}>Documentos</LinkButton>}
+                flush
+              >
+                <BlockBody block={changed} rows={3}>
+                  {(page) =>
+                    page.items.length === 0 ? (
+                      <Empty>Nenhum documento com versão nova.</Empty>
+                    ) : (
+                      <List>
+                        {page.items.slice(0, 5).map((doc) => (
+                          <Item key={doc.id}>
+                            <button type="button" onClick={() => openDocument(doc.id)}>
+                              <Texts>
+                                <Title title={doc.title}>{doc.title}</Title>
+                                <Sub>
+                                  {doc.versionCount} versões · alterado em {formatDate(doc.updatedAt.slice(0, 10))}
+                                </Sub>
+                              </Texts>
+                            </button>
+                          </Item>
+                        ))}
+                      </List>
+                    )
+                  }
+                </BlockBody>
+              </SectionCard>
+            )}
 
-          <SectionCard
-            title={
-              <CardTitle>
-                <FileDoneOutlined /> DAS de {periodLabel(dasPeriod)}
-              </CardTitle>
-            }
-            extra={<LinkButton onClick={() => navigate(DAS_PATH)}>Geração de DAS</LinkButton>}
-            flush
-          >
-            <BlockBody block={das} rows={2}>
-              {(data) => {
-                const counts = dasCounts(data.items);
-                if (counts.total === 0) return <Empty>Nenhum cliente MEI ativo.</Empty>;
-                return (
-                  <List>
-                    <Item>
-                      <button type="button" onClick={() => navigate(DAS_PATH)}>
-                        <Texts>
-                          <Title>{counts.pending ? `${counts.pending} de ${counts.total} sem guia gerada` : 'Todas as guias foram geradas'}</Title>
-                          <Sub>
-                            vence em {formatDate(data.dueDate)} ({relativeDay(data.dueDate, today)})
-                            {counts.unpaid ? ` · ${counts.unpaid} gerada${counts.unpaid > 1 ? 's' : ''} sem pagamento` : ''}
-                          </Sub>
-                        </Texts>
-                        <StatusBadge tone={counts.pending ? 'warning' : 'success'}>{counts.pending ? 'Pendente' : 'Em dia'}</StatusBadge>
-                      </button>
-                    </Item>
-                  </List>
-                );
-              }}
-            </BlockBody>
-          </SectionCard>
-
-          <SectionCard
-            title={
-              <CardTitle>
-                <ProjectOutlined /> Projetos
-              </CardTitle>
-            }
-            extra={<LinkButton onClick={() => navigate('/projetos')}>Portal de Projetos</LinkButton>}
-            flush
-          >
-            <BlockBody block={projects} rows={2}>
-              {() =>
-                projectDeadlines.length === 0 ? (
-                  <Empty>Nenhum projeto atrasado ou terminando nesta semana.</Empty>
-                ) : (
-                  <List>
-                    {projectDeadlines.slice(0, LIST_LIMIT).map(({ project, deadline }) => (
-                      <Item key={project.id}>
-                        <button type="button" onClick={() => navigate(`/projetos/${encodeURIComponent(project.id)}`)}>
-                          <Texts>
-                            <Title title={project.name}>{project.name}</Title>
-                            <Sub>{deadline.label}</Sub>
-                          </Texts>
-                          <StatusBadge tone={deadline.tone}>{deadlineChip(deadline)}</StatusBadge>
-                        </button>
-                      </Item>
-                    ))}
-                  </List>
-                )
-              }
-            </BlockBody>
-          </SectionCard>
-
-          <SectionCard
-            title={
-              <CardTitle>
-                <FileSyncOutlined /> Documentos alterados
-              </CardTitle>
-            }
-            extra={<LinkButton onClick={() => navigate(`${CALENDAR_PATH}?aba=documentos`)}>Documentos</LinkButton>}
-            flush
-          >
-            <BlockBody block={changed} rows={3}>
-              {(page) =>
-                page.items.length === 0 ? (
-                  <Empty>Nenhum documento com versão nova.</Empty>
-                ) : (
-                  <List>
-                    {page.items.slice(0, 5).map((doc) => (
-                      <Item key={doc.id}>
-                        <button type="button" onClick={() => openDocument(doc.id)}>
-                          <Texts>
-                            <Title title={doc.title}>{doc.title}</Title>
-                            <Sub>
-                              {doc.versionCount} versões · alterado em {formatDate(doc.updatedAt.slice(0, 10))}
-                            </Sub>
-                          </Texts>
-                        </button>
-                      </Item>
-                    ))}
-                  </List>
-                )
-              }
-            </BlockBody>
-          </SectionCard>
-        </Stack>
+            {on.intelligence && (
+              <SectionCard
+                title={
+                  <CardTitle>
+                    <NotificationOutlined /> Publicações relevantes
+                  </CardTitle>
+                }
+                extra={<LinkButton onClick={() => navigate(publicationsPath({ from: publicationsFrom }))}>Ver todas</LinkButton>}
+                flush
+              >
+                <BlockBody block={publications}>
+                  {() =>
+                    recentPublications.length === 0 ? (
+                      <Empty>Nenhuma publicação crítica ou alta nos últimos {RECENT_PUBLICATION_DAYS} dias.</Empty>
+                    ) : (
+                      <List>
+                        {recentPublications.map((pub) => (
+                          <Item key={pub.id}>
+                            <button type="button" onClick={() => navigate(publicationsPath({}), { state: { openPublication: pub } })}>
+                              <Texts>
+                                <Title title={pub.title}>{pub.title}</Title>
+                                <Sub>{[pub.publishedAt && formatPublicationDate(pub.publishedAt), pub.organ || pub.actType].filter(Boolean).join(' · ')}</Sub>
+                              </Texts>
+                              <StatusBadge tone={RELEVANCE[pub.relevance].tone}>{RELEVANCE[pub.relevance].label}</StatusBadge>
+                            </button>
+                          </Item>
+                        ))}
+                      </List>
+                    )
+                  }
+                </BlockBody>
+              </SectionCard>
+            )}
+          </Stack>
+        )}
       </Columns>
 
       {calendarStatus.data && <EventModal event={openEvent} status={calendarStatus.data} onClose={() => setOpenEvent(null)} />}

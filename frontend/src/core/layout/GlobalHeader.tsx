@@ -14,6 +14,7 @@ import { countNew, isNew, ITEMS_PER_GROUP, type NotificationGroup, notifications
 import { useThemeMode } from '@/core/theme/themeMode';
 import { APP_VERSION, BRAND_NAME, BrandLogo, IconCircle } from '@/core/ui';
 import { UserAvatar } from '@/core/ui/UserAvatar';
+import { useModules } from '@/core/modules/modulesContext';
 import { MODULE_GROUPS, MODULES } from '@/modules';
 import { useModuleNotifications } from '@/modules/notifications';
 import { chrome, colors, GLOBAL_HEADER_HEIGHT, shadows } from '@/theme';
@@ -393,8 +394,10 @@ export function GlobalHeader() {
   const { narrow } = useLayout();
   const navigate = useNavigate();
   const location = useLocation();
+  const { isEnabled } = useModules();
   const activeModule = MODULES.find((m) => location.pathname.startsWith(m.path));
-  const navEntries = useMemo(() => buildMenuItems(MODULES, MODULE_GROUPS), []);
+  // só os módulos ligados em Ajustes > Módulos entram na navegação
+  const navEntries = useMemo(() => buildMenuItems(MODULES.filter((m) => isEnabled(m.key)), MODULE_GROUPS), [isEnabled]);
   const [navOpen, setNavOpen] = useState(false);
   const goToModule = (key: string) => navigate(MODULES.find((m) => m.key === key)?.path ?? '/');
   const groups = useModuleNotifications();

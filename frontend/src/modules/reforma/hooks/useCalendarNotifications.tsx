@@ -65,10 +65,14 @@ function upcomingItems(events: CalendarEvent[], today: string): NotificationItem
 
 /** Calendário alerts for the notification center: rules that may have changed, obligations
  * published this week and deadlines of the next 7 days (null while loading). */
-export function useCalendarNotifications(): NotificationGroup | null {
+export function useCalendarNotifications(enabled = true): NotificationGroup | null {
   const [group, setGroup] = useState<NotificationGroup | null>(null);
 
   useEffect(() => {
+    if (!enabled) {
+      setGroup(null);
+      return undefined;
+    }
     let active = true;
     const load = async () => {
       try {
@@ -102,7 +106,7 @@ export function useCalendarNotifications(): NotificationGroup | null {
       active = false;
       window.clearInterval(timer);
     };
-  }, []);
+  }, [enabled]);
 
   return group;
 }

@@ -40,10 +40,14 @@ function toGroup(critical: Publication[], from: string): NotificationGroup {
 }
 
 /** Critical publications of the last 30 days for the notification center (null while loading). */
-export function useCriticalNotifications(): NotificationGroup | null {
+export function useCriticalNotifications(enabled = true): NotificationGroup | null {
   const [group, setGroup] = useState<NotificationGroup | null>(null);
 
   useEffect(() => {
+    if (!enabled) {
+      setGroup(null);
+      return undefined;
+    }
     let active = true;
     const load = () => {
       const from = daysAgo(RECENT_DAYS);
@@ -61,7 +65,7 @@ export function useCriticalNotifications(): NotificationGroup | null {
       active = false;
       window.clearInterval(timer);
     };
-  }, []);
+  }, [enabled]);
 
   return group;
 }

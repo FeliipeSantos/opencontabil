@@ -57,6 +57,12 @@ def _before_request():
     # Escritas só com JSON: formulários de outros sites não conseguem enviar (proteção CSRF)
     if request.method in WRITE_METHODS and not (request.headers.get("Content-Type") or "").startswith("application/json"):
         return json_error(415, "Envie o conteúdo como application/json")
+
+    # módulo desligado em Ajustes > Módulos: a API dele também fica fechada
+    from app.core.modules import DISABLED_MESSAGE, blocked_module
+
+    if blocked_module(path, request.method):
+        return json_error(403, DISABLED_MESSAGE)
     return None
 
 

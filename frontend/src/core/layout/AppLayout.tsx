@@ -4,6 +4,7 @@ import styled from 'styled-components';
 
 import { GlobalHeader } from '@/core/layout/GlobalHeader';
 import { LayoutContext } from '@/core/layout/layoutContext';
+import { ModuleGate } from '@/core/modules/ModuleGate';
 import { colors } from '@/theme';
 
 /** Below this width the modules no longer fit in the top bar and move to the menu button. */
@@ -45,7 +46,9 @@ export function AppLayout() {
       <Shell>
         <GlobalHeader />
         <Main>
-          <Outlet />
+          <ModuleGate>
+            <Outlet />
+          </ModuleGate>
         </Main>
       </Shell>
     </LayoutContext.Provider>
