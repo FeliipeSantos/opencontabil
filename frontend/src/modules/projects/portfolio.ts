@@ -57,14 +57,17 @@ export interface ActivityBreakdown {
 
 /** Activities by status and sub-activities completed. */
 export function activityBreakdown(project: Project): ActivityBreakdown {
-  const result: ActivityBreakdown = { done: 0, ongoing: 0, delayed: 0, todo: 0, total: project.activities.length, subDone: 0, subTotal: 0 };
-  project.activities.forEach((activity) => {
+  // canceladas não contam
+  const activities = project.activities.filter((a) => !a.cancelled);
+  const result: ActivityBreakdown = { done: 0, ongoing: 0, delayed: 0, todo: 0, total: activities.length, subDone: 0, subTotal: 0 };
+  activities.forEach((activity) => {
     if (activity.status === 'Concluído') result.done += 1;
     else if (activity.status === 'Em andamento') result.ongoing += 1;
     else if (activity.status === 'Atrasado') result.delayed += 1;
     else result.todo += 1;
-    result.subTotal += activity.subActivities.length;
-    result.subDone += activity.subActivities.filter((s) => s.completed).length;
+    const subs = activity.subActivities.filter((s) => !s.cancelled);
+    result.subTotal += subs.length;
+    result.subDone += subs.filter((s) => s.completed).length;
   });
   return result;
 }

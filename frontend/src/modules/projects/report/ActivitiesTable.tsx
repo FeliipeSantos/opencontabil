@@ -1,10 +1,11 @@
-import { DeleteOutlined, HolderOutlined, PlusOutlined } from '@ant-design/icons';
+import { DeleteOutlined, HolderOutlined, PlusOutlined, StopOutlined, UndoOutlined } from '@ant-design/icons';
 import { App, Button, Select } from 'antd';
 import { useState } from 'react';
 
-import { addActivity, moveActivity, removeActivity, renameActivity, setActivityStatus, statusTone } from '@/modules/projects/model';
+import { addActivity, moveActivity, projectProgress, removeActivity, renameActivity, setActivityCancelled, setActivityStatus, statusTone } from '@/modules/projects/model';
 import { EditableText } from '@/modules/projects/report/EditableText';
 import {
+  ActionsCell,
   ActivityRow,
   AddRowCell,
   DragCell,
@@ -63,6 +64,8 @@ export function ActivitiesTable({ project, editing, selectedId, onSelect, onChan
   }
 
   const columns = editing ? 5 : 3;
+  // avanço do projeto: média das atividades, a mesma conta da lista de projetos
+  const progress = projectProgress(project);
 
   return (
     <MiddleCard>
@@ -88,6 +91,7 @@ export function ActivitiesTable({ project, editing, selectedId, onSelect, onChan
               $selected={activity.id === selectedId}
               $dragging={activity.id === draggingId}
               $dropTarget={activity.id === overId && draggingId !== activity.id}
+              $cancelled={Boolean(activity.cancelled)}
               onClick={() => onSelect(activity.id)}
               onDragOver={(e) => {
                 if (draggingId === null || draggingId === activity.id) return;
@@ -146,7 +150,19 @@ export function ActivitiesTable({ project, editing, selectedId, onSelect, onChan
                 )}
               </StatusCell>
               {editing && (
-                <td>
+                <ActionsCell className="cancel-keep">
+                  <Button
+                    type="text"
+                    size="small"
+                    icon={activity.cancelled ? <UndoOutlined /> : <StopOutlined />}
+                    title={activity.cancelled ? 'Reativar a atividade' : 'Cancelar a atividade'}
+                    aria-label={activity.cancelled ? `Reativar a atividade ${activity.name}` : `Cancelar a atividade ${activity.name}`}
+                    aria-pressed={Boolean(activity.cancelled)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onChange(setActivityCancelled(project, activity.id, !activity.cancelled));
+                    }}
+                  />
                   <Button
                     type="text"
                     size="small"
@@ -158,7 +174,7 @@ export function ActivitiesTable({ project, editing, selectedId, onSelect, onChan
                       confirmRemove(activity.id, activity.name);
                     }}
                   />
-                </td>
+                </ActionsCell>
               )}
             </ActivityRow>
           ))}
@@ -167,8 +183,8 @@ export function ActivitiesTable({ project, editing, selectedId, onSelect, onChan
             <IdCell />
             <td>AVANÇO DO PROJETO</td>
             <StatusCell>
-              <StatusBadge $tone="done" $outlined>
-                PROJETO
+              <StatusBadge $tone={progress >= 100 ? 'done' : progress > 0 ? 'ongoing' : 'todo'} $outlined title="Média das atividades (as canceladas não contam)">
+                {progress.toLocaleString('pt-BR', { maximumFractionDigits: 2 })}%
               </StatusBadge>
             </StatusCell>
             {editing && <td />}

@@ -1,12 +1,13 @@
-import { DeleteOutlined, PlusOutlined } from '@ant-design/icons';
+import { DeleteOutlined, HolderOutlined, PlusOutlined, StopOutlined, UndoOutlined } from '@ant-design/icons';
 import { Button, Checkbox, Flex, Input } from 'antd';
 import { useState } from 'react';
 
 import { useCharLimit } from '@/core/hooks/useCharLimit';
-import { addSubActivity, removeSubActivity, renameSubActivity } from '@/modules/projects/model';
+import { addSubActivity, moveSubActivity, removeSubActivity, renameSubActivity, setSubActivityCancelled } from '@/modules/projects/model';
 import { EditableText } from '@/modules/projects/report/EditableText';
 import {
   CountBadge,
+  DragHandle,
   EmptyBox,
   MiddleCard,
   MiddleTitle,
@@ -31,6 +32,15 @@ interface SubActivitiesCardProps {
 export function SubActivitiesCard({ project, activity, editing, onChange, onToggle }: SubActivitiesCardProps) {
   const [newName, setNewName] = useState('');
   const nameLimit = useCharLimit('subActivityName');
+  // arrastar para reordenar (modo de edição), como nas atividades
+  const [dragging, setDragging] = useState<number | null>(null);
+  const [over, setOver] = useState<number | null>(null);
+
+  function drop(target: number) {
+    setOver(null);
+    if (activity && dragging !== null && dragging !== target) onChange(moveSubActivity(project, activity.id, dragging, target));
+    setDragging(null);
+  }
 
   function add() {
     if (!activity || !newName.trim()) return;
@@ -74,9 +84,48 @@ export function SubActivitiesCard({ project, activity, editing, onChange, onTogg
       {activity && activity.subActivities.length > 0 && (
         <ScrollList>
           {activity.subActivities.map((sub, index) => (
-            <SubActivityItem key={`${activity.id}-${index}-${sub.name}`} $completed={sub.completed}>
+            <SubActivityItem
+              key={`${activity.id}-${index}-${sub.name}`}
+              $completed={sub.completed}
+              $cancelled={Boolean(sub.cancelled)}
+              $dragging={index === dragging}
+              $dropTarget={index === over && dragging !== index}
+              onDragOver={(e) => {
+                if (dragging === null || dragging === index) return;
+                e.preventDefault();
+                setOver(index);
+              }}
+              onDragLeave={() => setOver((current) => (current === index ? null : current))}
+              onDrop={(e) => {
+                e.preventDefault();
+                drop(index);
+              }}
+            >
               <Flex gap={8} align="center" flex={1}>
-                <Checkbox checked={sub.completed} onChange={(e) => onToggle(index, e.target.checked)} aria-label={`Concluir: ${sub.name}`} />
+                {editing && (
+                  <DragHandle
+                    draggable
+                    title="Arraste para reordenar"
+                    aria-hidden
+                    onDragStart={(e) => {
+                      e.dataTransfer.effectAllowed = 'move';
+                      e.dataTransfer.setData('text/plain', String(index));
+                      setDragging(index);
+                    }}
+                    onDragEnd={() => {
+                      setDragging(null);
+                      setOver(null);
+                    }}
+                  >
+                    <HolderOutlined />
+                  </DragHandle>
+                )}
+                <Checkbox
+                  checked={sub.completed}
+                  disabled={Boolean(sub.cancelled)}
+                  onChange={(e) => onToggle(index, e.target.checked)}
+                  aria-label={`Concluir: ${sub.name}`}
+                />
                 <EditableText
                   value={sub.name}
                   editing={editing}
@@ -86,13 +135,25 @@ export function SubActivitiesCard({ project, activity, editing, onChange, onTogg
                 />
               </Flex>
               {editing && (
-                <Button
-                  type="text"
-                  size="small"
-                  icon={<DeleteOutlined />}
-                  aria-label={`Excluir subatividade ${sub.name}`}
-                  onClick={() => onChange(removeSubActivity(project, activity.id, index))}
-                />
+                <Flex className="cancel-keep" gap={2}>
+                  <Button
+                    type="text"
+                    size="small"
+                    icon={sub.cancelled ? <UndoOutlined /> : <StopOutlined />}
+                    title={sub.cancelled ? 'Reativar a subatividade' : 'Cancelar a subatividade'}
+                    aria-label={sub.cancelled ? `Reativar subatividade ${sub.name}` : `Cancelar subatividade ${sub.name}`}
+                    aria-pressed={Boolean(sub.cancelled)}
+                    onClick={() => onChange(setSubActivityCancelled(project, activity.id, index, !sub.cancelled))}
+                  />
+                  <Button
+                    type="text"
+                    size="small"
+                    icon={<DeleteOutlined />}
+                    title="Excluir a subatividade"
+                    aria-label={`Excluir subatividade ${sub.name}`}
+                    onClick={() => onChange(removeSubActivity(project, activity.id, index))}
+                  />
+                </Flex>
               )}
             </SubActivityItem>
           ))}

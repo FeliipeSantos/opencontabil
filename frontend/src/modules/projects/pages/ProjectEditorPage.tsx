@@ -10,7 +10,7 @@ import { LoadingState, StatusBadge } from '@/core/ui';
 import { getProject, saveProject } from '@/modules/projects/api';
 import { toggleSubActivity, withProjectProgress } from '@/modules/projects/model';
 import { ActivitiesTable } from '@/modules/projects/report/ActivitiesTable';
-import { AttentionCards, KanbanBoard } from '@/modules/projects/report/BoardSections';
+import { AttentionCards } from '@/modules/projects/report/BoardSections';
 import { fitPagesForPrint } from '@/modules/projects/report/print';
 import { PrintPages } from '@/modules/projects/report/PrintPages';
 import { InfoCards, ReportHeader } from '@/modules/projects/report/ReportHeader';
@@ -199,7 +199,6 @@ export function ProjectEditorPage() {
             <SubActivitiesCard project={project} activity={activity} editing={editable} onChange={setProject} onToggle={toggleSub} />
           </MiddleRow>
           <AttentionCards project={project} activity={activity} editing={editable} onChange={setProject} />
-          <KanbanBoard project={project} editing={editable} onChange={setProject} />
         </Paper>
       </Viewport>
       {/* páginas de detalhe das atividades: só na impressão, sempre em papel */}

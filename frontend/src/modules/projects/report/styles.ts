@@ -7,6 +7,24 @@ import styled, { css } from 'styled-components';
 
 import { colors, fontSize, radius, shadows } from '@/theme';
 
+/**
+ * Cancelled activity or sub-activity: text struck through and darker; the actions (last
+ * cell / button) keep full strength so the item can be brought back.
+ */
+const cancelledLook = css`
+  > :not(.cancel-keep) {
+    opacity: 0.45;
+    text-decoration: line-through;
+
+    /* o risco não passa sozinho para campos e seletores (modo de edição) */
+    input,
+    textarea,
+    .ant-select-selection-item {
+      text-decoration: line-through;
+    }
+  }
+`;
+
 /** Logical size of one printed page (landscape A4 at the base zoom). */
 export const PRINT_PAGE_WIDTH = 1440;
 export const PRINT_PAGE_HEIGHT = 1020;
@@ -205,7 +223,7 @@ export const Table = styled.table`
   }
 `;
 
-export const ActivityRow = styled.tr<{ $selected: boolean; $dragging: boolean; $dropTarget: boolean }>`
+export const ActivityRow = styled.tr<{ $selected: boolean; $dragging: boolean; $dropTarget: boolean; $cancelled?: boolean }>`
   cursor: pointer;
   transition: background-color 0.15s ease;
   background-color: ${({ $selected }) => ($selected ? colors.blueSelected : 'transparent')};
@@ -216,6 +234,8 @@ export const ActivityRow = styled.tr<{ $selected: boolean; $dragging: boolean; $
   &:hover {
     background-color: ${({ $selected }) => ($selected ? colors.blueSelected : colors.bgSubtle)};
   }
+
+  ${({ $cancelled }) => $cancelled && cancelledLook}
 `;
 
 export const SummaryRow = styled.tr`
@@ -227,6 +247,12 @@ export const SummaryRow = styled.tr`
     border-bottom: none;
     color: ${colors.navy};
   }
+`;
+
+// cancelar e excluir lado a lado
+export const ActionsCell = styled.td`
+  width: 72px;
+  white-space: nowrap;
 `;
 
 export const IdCell = styled.td`
@@ -243,6 +269,18 @@ export const StatusCell = styled.td`
 export const DragCell = styled.td`
   width: 26px;
   text-align: center;
+  cursor: grab;
+  color: ${colors.textMuted};
+  user-select: none;
+
+  &:active {
+    cursor: grabbing;
+  }
+`;
+
+/** Handle to drag a sub-activity (edit mode), like the one of the activities. */
+export const DragHandle = styled.span`
+  flex-shrink: 0;
   cursor: grab;
   color: ${colors.textMuted};
   user-select: none;
@@ -355,33 +393,6 @@ export const Bullet = styled.li<{ $plain?: boolean }>`
   }
 `;
 
-export const KanbanRow = styled.div`
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 16px;
-`;
-
-export const KanbanColumnBox = styled.div`
-  ${cardBase}
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-  min-height: 110px;
-`;
-
-export const KanbanHeader = styled.div<{ $column: 'done' | 'doing' | 'todo' }>`
-  padding: 12px 20px;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  font-size: ${fontSize.cardTitle}px;
-  font-weight: 600;
-  color: ${colors.navy};
-  border-bottom: 1px solid ${colors.border};
-  box-shadow: inset 0 3px 0 ${({ $column }) => colors.kanban[$column].border};
-  ${printExact}
-`;
-
 export const CountBadge = styled.span<{ $color: string }>`
   min-width: 24px;
   padding: 1px 8px;
@@ -394,15 +405,10 @@ export const CountBadge = styled.span<{ $color: string }>`
   ${printExact}
 `;
 
-export const KanbanBody = styled.div`
-  padding: 12px 20px;
+export const SubActivityItem = styled.li<{ $completed: boolean; $cancelled?: boolean; $dragging?: boolean; $dropTarget?: boolean }>`
   display: flex;
-  flex-direction: column;
-  flex: 1;
-`;
-
-export const SubActivityItem = styled.li<{ $completed: boolean }>`
-  display: flex;
+  opacity: ${({ $dragging }) => ($dragging ? 0.4 : 1)};
+  box-shadow: ${({ $dropTarget }) => ($dropTarget ? `inset 0 2px 0 ${colors.blue}` : 'none')};
   align-items: center;
   justify-content: space-between;
   gap: 8px;
@@ -427,6 +433,13 @@ export const SubActivityItem = styled.li<{ $completed: boolean }>`
       opacity: 1;
     }
   }
+
+  ${({ $cancelled }) =>
+    $cancelled &&
+    css`
+      background: ${colors.bgMuted};
+      ${cancelledLook}
+    `}
 `;
 
 export const EmptyBox = styled.div`

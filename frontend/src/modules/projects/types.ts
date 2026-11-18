@@ -7,6 +7,8 @@ export interface SubActivity {
   id: number;
   name: string;
   completed: boolean;
+  /** Cancelled: kept struck through, out of the activity progress. */
+  cancelled?: boolean;
 }
 
 /** Lists kept per activity, shown in the three attention cards. */
@@ -21,6 +23,8 @@ export interface Activity {
   attentionPoints: string[];
   projectImpacts: string[];
   actionPlans: string[];
+  /** Cancelled: kept struck through, out of the project progress. */
+  cancelled?: boolean;
   [key: string]: unknown;
 }
 

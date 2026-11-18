@@ -4,7 +4,7 @@
  */
 import dayjs, { type Dayjs } from 'dayjs';
 
-import type { Activity, ActivityListKey, ActivityStatus, KanbanColumn, Project, ProjectTextField } from '@/modules/projects/types';
+import type { Activity, ActivityListKey, ActivityStatus, Project, ProjectTextField } from '@/modules/projects/types';
 
 export const DATE_FORMAT = 'DD/MM/YYYY';
 
@@ -42,9 +42,9 @@ export function normalizeProject(project: Project): Project {
   });
 }
 
-/** Overall progress: average of the activities, with two decimals. */
+/** Overall progress: average of the activities (cancelled ones left out), with two decimals. */
 export function projectProgress(project: Pick<Project, 'activities'>): number {
-  const activities = project.activities ?? [];
+  const activities = (project.activities ?? []).filter((a) => !a.cancelled);
   if (!activities.length) return 0;
   const sum = activities.reduce((total, activity) => total + (Number(activity.progress) || 0), 0);
   return parseFloat((sum / activities.length).toFixed(2));
@@ -56,11 +56,12 @@ export function withProjectProgress(project: Project): Project {
   });
 }
 
-/** Activity progress from its checklist; without sub-activities the progress stays manual. */
+/** Activity progress from its checklist (cancelled items left out); without sub-activities the progress stays manual. */
 function recalculateActivity(activity: Activity): void {
-  if (!activity.subActivities.length) return;
-  const done = activity.subActivities.filter((s) => s.completed).length;
-  activity.progress = Math.round((done / activity.subActivities.length) * 100);
+  const active = activity.subActivities.filter((s) => !s.cancelled);
+  if (!active.length) return;
+  const done = active.filter((s) => s.completed).length;
+  activity.progress = Math.round((done / active.length) * 100);
   if (activity.progress === 100) activity.status = 'Concluído';
   else if (activity.progress === 0) activity.status = 'Não iniciado';
   else if (activity.status !== 'Atrasado') activity.status = 'Em andamento';
@@ -93,7 +94,6 @@ export function newProject(name: string, now = dayjs()): Project {
         actionPlans: [],
       },
     ],
-    kanban: { done: [], doing: [], todo: ['Definição do escopo inicial da fase de planejamento'] },
   };
 }
 
@@ -138,6 +138,17 @@ export function setActivityStatus(project: Project, activityId: number, status: 
     activity.status = status;
     if (status === 'Concluído') activity.progress = 100;
     else if (status === 'Não iniciado') activity.progress = 0;
+    p.percentActual = projectProgress(p);
+  });
+}
+
+/** Cancels an activity (struck through, out of the progress) or brings it back. */
+export function setActivityCancelled(project: Project, activityId: number, cancelled: boolean): Project {
+  return update(project, (p) => {
+    const activity = findActivity(p, activityId);
+    if (!activity) return;
+    if (cancelled) activity.cancelled = true;
+    else delete activity.cancelled;
     p.percentActual = projectProgress(p);
   });
 }
@@ -187,6 +198,27 @@ export function toggleSubActivity(project: Project, activityId: number, index: n
   });
 }
 
+/** Cancels a sub-activity (struck through, out of the activity progress) or brings it back. */
+export function setSubActivityCancelled(project: Project, activityId: number, index: number, cancelled: boolean): Project {
+  return update(project, (p) => {
+    const sub = findActivity(p, activityId)?.subActivities[index];
+    if (!sub) return;
+    if (cancelled) sub.cancelled = true;
+    else delete sub.cancelled;
+    afterActivityChange(p, activityId);
+  });
+}
+
+/** Moves a sub-activity onto the position of another (drag and drop, same rule as the activities). */
+export function moveSubActivity(project: Project, activityId: number, from: number, to: number): Project {
+  return update(project, (p) => {
+    const subs = findActivity(p, activityId)?.subActivities;
+    if (!subs || from === to || !subs[from] || !subs[to]) return;
+    const [moved] = subs.splice(from, 1);
+    subs.splice(from < to ? to - 1 : to, 0, moved);
+  });
+}
+
 export function addSubActivity(project: Project, activityId: number, name: string): Project {
   return update(project, (p) => {
     const activity = findActivity(p, activityId);
@@ -214,10 +246,9 @@ export function removeSubActivity(project: Project, activityId: number, index: n
   });
 }
 
-// ---------- attention lists and kanban ----------
+// ---------- attention lists ----------
 
 export const NEW_LIST_ITEM = 'Novo item...';
-export const NEW_KANBAN_CARD = 'Novo cartão...';
 
 export function addListItem(project: Project, activityId: number, key: ActivityListKey): Project {
   return update(project, (p) => {
@@ -238,35 +269,6 @@ export function setListItem(project: Project, activityId: number, key: ActivityL
 export function removeListItem(project: Project, activityId: number, key: ActivityListKey, index: number): Project {
   return update(project, (p) => {
     findActivity(p, activityId)?.[key].splice(index, 1);
-  });
-}
-
-function ensureKanban(project: Project) {
-  project.kanban ??= { done: [], doing: [], todo: [] };
-  return project.kanban;
-}
-
-export function addKanbanCard(project: Project, column: KanbanColumn): Project {
-  return update(project, (p) => {
-    const kanban = ensureKanban(p);
-    kanban[column] ??= [];
-    kanban[column].push(NEW_KANBAN_CARD);
-  });
-}
-
-/** Changes a kanban card; an empty text removes it. */
-export function setKanbanCard(project: Project, column: KanbanColumn, index: number, text: string): Project {
-  return update(project, (p) => {
-    const cards = ensureKanban(p)[column];
-    if (!cards || index >= cards.length) return;
-    if (text.trim()) cards[index] = text.trim();
-    else cards.splice(index, 1);
-  });
-}
-
-export function removeKanbanCard(project: Project, column: KanbanColumn, index: number): Project {
-  return update(project, (p) => {
-    ensureKanban(p)[column]?.splice(index, 1);
   });
 }
 

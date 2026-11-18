@@ -1,4 +1,4 @@
-import { addKanbanCard, addListItem, removeKanbanCard, removeListItem, setKanbanCard, setListItem } from '@/modules/projects/model';
+import { addListItem, removeListItem, setListItem } from '@/modules/projects/model';
 import { EditableList } from '@/modules/projects/report/EditableList';
 import {
   type Accent,
@@ -7,14 +7,8 @@ import {
   AttentionTitle,
   Bullet,
   BulletList,
-  CountBadge,
-  KanbanBody,
-  KanbanColumnBox,
-  KanbanHeader,
-  KanbanRow,
 } from '@/modules/projects/report/styles';
-import type { Activity, ActivityListKey, KanbanColumn, Project } from '@/modules/projects/types';
-import { colors } from '@/theme';
+import type { Activity, ActivityListKey, Project } from '@/modules/projects/types';
 
 interface SectionProps {
   project: Project;
@@ -57,41 +51,5 @@ export function AttentionCards({ project, editing, onChange, activity }: Section
         </AttentionCard>
       ))}
     </AttentionRow>
-  );
-}
-
-const KANBAN_COLUMNS: { key: KanbanColumn; title: string; color: string }[] = [
-  { key: 'done', title: 'Concluído', color: colors.green },
-  { key: 'doing', title: 'Em andamento', color: colors.orange },
-  { key: 'todo', title: 'A fazer', color: colors.blue },
-];
-
-export function KanbanBoard({ project, editing, onChange }: SectionProps) {
-  return (
-    <KanbanRow>
-      {KANBAN_COLUMNS.map(({ key, title, color }) => {
-        const cards = project.kanban?.[key] ?? [];
-        return (
-          <KanbanColumnBox key={key}>
-            <KanbanHeader $column={key}>
-              <span>{title}</span>
-              <CountBadge $color={color}>{cards.length}</CountBadge>
-            </KanbanHeader>
-            <KanbanBody>
-              <EditableList
-                items={cards}
-                editing={editing}
-                field="kanbanCard"
-                itemLabel="Cartão"
-                emptyText="Nenhum item nesta etapa."
-                onAdd={() => onChange(addKanbanCard(project, key))}
-                onCommit={(index, text) => onChange(setKanbanCard(project, key, index, text))}
-                onRemove={(index) => onChange(removeKanbanCard(project, key, index))}
-              />
-            </KanbanBody>
-          </KanbanColumnBox>
-        );
-      })}
-    </KanbanRow>
   );
 }

@@ -6,14 +6,16 @@ import {
   addActivity,
   addSubActivity,
   moveActivity,
+  moveSubActivity,
   newProject,
   normalizeProject,
   parseReportDate,
   projectProgress,
   removeActivity,
   renameSubActivity,
+  setActivityCancelled,
   setActivityStatus,
-  setKanbanCard,
+  setSubActivityCancelled,
   setListItem,
   toggleSubActivity,
 } from '@/modules/projects/model';
@@ -69,13 +71,11 @@ describe('activities', () => {
     expect(moved.selectedId).toBe(1);
   });
 
-  it('empty text removes sub-activities, list items and kanban cards', () => {
+  it('empty text removes sub-activities and list items', () => {
     let project = renameSubActivity(sample(), 1, 0, '   ');
     expect(project.activities[0].subActivities.map((s) => s.name)).toEqual(['Segunda']);
     project = setListItem({ ...project, activities: [{ ...project.activities[0], attentionPoints: ['a', 'b'] }] }, 1, 'attentionPoints', 0, '');
     expect(project.activities[0].attentionPoints).toEqual(['b']);
-    project = setKanbanCard(project, 'todo', 0, '');
-    expect(project.kanban?.todo).toEqual([]);
   });
 });
 
@@ -98,5 +98,42 @@ describe('parseReportDate', () => {
   it('returns null for empty or invalid text', () => {
     expect(parseReportDate('')).toBeNull();
     expect(parseReportDate('maio de 2026')).toBeNull();
+  });
+});
+
+describe('cancel', () => {
+  it('leaves a cancelled sub-activity out of the activity progress', () => {
+    // "Definição do escopo inicial" concluída, "Segunda" pendente: 50%
+    let project = toggleSubActivity(sample(), 1, 0, true);
+    expect(project.activities[0].progress).toBe(50);
+    project = setSubActivityCancelled(project, 1, 1, true);
+    expect(project.activities[0].subActivities[1].cancelled).toBe(true);
+    expect(project.activities[0].progress).toBe(100);
+    expect(project.activities[0].status).toBe('Concluído');
+    project = setSubActivityCancelled(project, 1, 1, false);
+    expect(project.activities[0].subActivities[1]).not.toHaveProperty('cancelled');
+    expect(project.activities[0].progress).toBe(50);
+  });
+
+  it('leaves a cancelled activity out of the project progress', () => {
+    let project = setActivityStatus(sample(), 1, 'Concluído');
+    project = addActivity(project).project;
+    expect(projectProgress(project)).toBe(50);
+    project = setActivityCancelled(project, 2, true);
+    expect(projectProgress(project)).toBe(100);
+    expect(project.percentActual).toBe(100);
+    project = setActivityCancelled(project, 2, false);
+    expect(projectProgress(project)).toBe(50);
+  });
+});
+
+describe('moveSubActivity', () => {
+  it('drops the sub-activity onto the position of another', () => {
+    let project = addSubActivity(sample(), 1, 'Terceira');
+    const names = (p: Project) => p.activities[0].subActivities.map((s) => s.name);
+    project = moveSubActivity(project, 1, 2, 0);
+    expect(names(project)).toEqual(['Terceira', 'Definição do escopo inicial', 'Segunda']);
+    project = moveSubActivity(project, 1, 0, 2);
+    expect(names(project)).toEqual(['Definição do escopo inicial', 'Terceira', 'Segunda']);
   });
 });

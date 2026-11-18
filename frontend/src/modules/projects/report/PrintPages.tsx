@@ -48,10 +48,17 @@ const HeaderRight = styled.div`
   gap: 6px;
 `;
 
-const ActivityName = styled.span`
+// cancelada: riscada e apagada também no PDF
+const struck = css`
+  opacity: 0.5;
+  text-decoration: line-through;
+`;
+
+const ActivityName = styled.span<{ $cancelled: boolean }>`
   font-weight: 700;
   font-size: 1.1rem;
   color: ${colors.blue};
+  ${({ $cancelled }) => $cancelled && struck}
 `;
 
 const SectionTitle = styled.h3`
@@ -71,7 +78,7 @@ const Checklist = styled.ul`
   gap: 10px 20px;
 `;
 
-const CheckItem = styled.li<{ $completed: boolean }>`
+const CheckItem = styled.li<{ $completed: boolean; $cancelled?: boolean }>`
   display: flex;
   align-items: center;
   gap: 10px;
@@ -87,6 +94,8 @@ const CheckItem = styled.li<{ $completed: boolean }>`
     font-weight: bold;
     color: ${colors.blue};
   }
+
+  ${({ $cancelled }) => $cancelled && struck}
 `;
 
 const Grid = styled.div`
@@ -166,7 +175,7 @@ export const PrintPages = forwardRef<HTMLDivElement, { project: Project }>(funct
               <p>DETALHAMENTO DA ATIVIDADE</p>
             </div>
             <HeaderRight>
-              <ActivityName>{activity.name}</ActivityName>
+              <ActivityName $cancelled={Boolean(activity.cancelled)}>{activity.name}</ActivityName>
               <WideBadge $tone={statusTone(activity.status)}>
                 {activity.status} ({activity.progress}%)
               </WideBadge>
@@ -177,7 +186,7 @@ export const PrintPages = forwardRef<HTMLDivElement, { project: Project }>(funct
               <SectionTitle>Subatividades</SectionTitle>
               <Checklist>
                 {activity.subActivities.map((sub, index) => (
-                  <CheckItem key={index} $completed={sub.completed}>
+                  <CheckItem key={index} $completed={sub.completed} $cancelled={Boolean(sub.cancelled)}>
                     <span>{sub.completed ? '☑' : '☐'}</span>
                     <span>{sub.name}</span>
                   </CheckItem>
