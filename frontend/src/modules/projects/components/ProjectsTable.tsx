@@ -1,4 +1,4 @@
-import { CalendarOutlined, CheckCircleOutlined, ClockCircleOutlined, DeleteOutlined, EditOutlined, EyeOutlined, FileTextOutlined, MoreOutlined } from '@ant-design/icons';
+import { CalendarOutlined, CheckCircleOutlined, ClockCircleOutlined, DeleteOutlined, EyeOutlined, FileTextOutlined, MoreOutlined } from '@ant-design/icons';
 import { Button, Dropdown, Flex, Table, Tooltip } from 'antd';
 import type { Dayjs } from 'dayjs';
 import styled from 'styled-components';
@@ -99,13 +99,12 @@ interface ProjectsTableProps {
   projects: Project[];
   today: Dayjs;
   onOpen: (project: Project) => void;
-  onEdit: (project: Project) => void;
   onDelete: (project: Project) => void;
   emptyText: string;
 }
 
 /** "Meus Projetos": one row per project with status, progress, deadline and actions. */
-export function ProjectsTable({ projects, today, onOpen, onEdit, onDelete, emptyText }: ProjectsTableProps) {
+export function ProjectsTable({ projects, today, onOpen, onDelete, emptyText }: ProjectsTableProps) {
   return (
     <StyledTable
       rowKey="id"
@@ -192,9 +191,6 @@ export function ProjectsTable({ projects, today, onOpen, onEdit, onDelete, empty
             <Flex justify="flex-end" gap={2}>
               <Tooltip title="Abrir relatório">
                 <ActionButton type="text" icon={<EyeOutlined />} onClick={() => onOpen(project)} aria-label={`Abrir o projeto ${project.name}`} />
-              </Tooltip>
-              <Tooltip title="Editar">
-                <ActionButton type="text" icon={<EditOutlined />} onClick={() => onEdit(project)} aria-label={`Editar o projeto ${project.name}`} />
               </Tooltip>
               <Dropdown
                 trigger={['click']}

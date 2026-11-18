@@ -176,7 +176,7 @@ export function ProjectsPage() {
     });
   }
 
-  const open = (project: Project, edit = false) => navigate(`/projetos/${encodeURIComponent(project.id)}`, { state: edit ? { edit: true } : undefined });
+  const open = (project: Project) => navigate(`/projetos/${encodeURIComponent(project.id)}`);
   const activeFilters = (overdueOnly ? 1 : 0) + (sort !== 'position' ? 1 : 0);
   const filtering = search.trim() !== '' || status !== 'all' || overdueOnly;
 
@@ -283,7 +283,6 @@ export function ProjectsPage() {
               projects={visible}
               today={today}
               onOpen={(p) => open(p)}
-              onEdit={(p) => open(p, true)}
               onDelete={confirmDelete}
               emptyText={filtering ? 'Nenhum projeto corresponde à busca e aos filtros.' : 'Nenhum projeto ainda. Clique em "Novo Projeto" para criar o primeiro.'}
             />

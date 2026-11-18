@@ -2,7 +2,7 @@ import { EditOutlined, FolderOpenOutlined, PrinterOutlined, SaveOutlined } from 
 import { App, Button, Flex, Result } from 'antd';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
-import { useLocation, useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 
 import { errorMessage, SessionExpiredError } from '@/core/api/client';
 import { Page } from '@/core/layout/Page';
@@ -24,9 +24,6 @@ const serialize = (project: Project | null) => JSON.stringify(project);
 export function ProjectEditorPage() {
   const { projectId = '' } = useParams();
   const navigate = useNavigate();
-  const location = useLocation();
-  // "Editar" no card da lista abre o relatório já em modo de edição
-  const startEditing = (location.state as { edit?: boolean } | null)?.edit === true;
   const { message } = App.useApp();
   const [project, setProject] = useState<Project | null>(null);
   const [status, setStatus] = useState<'loading' | 'ready' | 'missing' | 'error'>('loading');
@@ -55,17 +52,13 @@ export function ProjectEditorPage() {
         savedRef.current = serialize(found);
         setProject(loaded);
         setSelectedId(loaded.activities[0]?.id ?? null);
-        if (startEditing) {
-          setBackup(structuredClone(loaded));
-          setEditing(true);
-        }
         setStatus('ready');
       })
       .catch((error) => active && !(error instanceof SessionExpiredError) && setStatus('error'));
     return () => {
       active = false;
     };
-  }, [projectId, startEditing]);
+  }, [projectId]);
 
   const persist = useCallback(
     async (next: Project | null) => {
