@@ -9,7 +9,11 @@ import { checklistProgress, type DueState, dueState } from '@/modules/boards/mod
 import type { BoardCard, BoardLabel } from '@/modules/boards/types';
 import { colors, fontSize, radius, shadows, tones } from '@/theme';
 
-// o círculo de concluir e os botões do canto aparecem ao passar o mouse, como no Trello
+/*
+ * Passar o mouse, como no Trello: o contorno claro de 2px e os botões do canto aparecem na hora;
+ * o círculo de concluir aparece em ~0,2 s e o título desliza para a direita (ao sair, ~0,3 s).
+ * O título só se move (transform), sem mudar de largura: o cartão nunca muda de altura.
+ */
 const Tile = styled.div<{ $dragging: boolean; $completed: boolean }>`
   position: relative;
   padding: 8px 10px;
@@ -20,41 +24,59 @@ const Tile = styled.div<{ $dragging: boolean; $completed: boolean }>`
   cursor: pointer;
   user-select: none;
   opacity: ${({ $dragging }) => ($dragging ? 0.4 : 1)};
-  transition:
-    border-color 0.12s ease,
-    box-shadow 0.12s ease;
 
   &:hover,
-  &:focus-within {
-    border-color: ${colors.blue};
+  &:focus-visible,
+  &:has(:focus-visible) {
+    border-color: ${tones.info.fg};
+    box-shadow: 0 0 0 1px ${tones.info.fg};
   }
 
   &:focus-visible {
-    outline: 2px solid ${colors.blue};
-    outline-offset: 1px;
+    outline: none;
   }
 
-  /* círculo: escondido até passar o mouse (sempre visível quando concluído) */
+  /* círculo: escondido até passar o mouse (sempre visível quando concluído); saída mais lenta */
   .card-done {
-    width: ${({ $completed }) => ($completed ? '18px' : '0')};
-    margin-right: ${({ $completed }) => ($completed ? '6px' : '0')};
     opacity: ${({ $completed }) => ($completed ? 1 : 0)};
+    transform: scale(${({ $completed }) => ($completed ? 1 : 0.4)});
+    pointer-events: ${({ $completed }) => ($completed ? 'auto' : 'none')};
+    transition:
+      opacity 0.25s ease,
+      transform 0.3s ease;
+  }
+
+  .card-title {
+    transform: translateX(${({ $completed }) => ($completed ? '22px' : '0')});
+    transition: transform 0.3s ease;
   }
 
   &:hover .card-done,
-  &:focus-within .card-done {
-    width: 18px;
-    margin-right: 6px;
+  &:focus-visible .card-done,
+  &:has(:focus-visible) .card-done {
     opacity: 1;
+    transform: scale(1);
+    pointer-events: auto;
+    transition:
+      opacity 0.2s ease-out,
+      transform 0.2s ease-out;
+  }
+
+  &:hover .card-title,
+  &:focus-visible .card-title,
+  &:has(:focus-visible) .card-title {
+    transform: translateX(22px);
+    transition: transform 0.2s ease-out;
   }
 
   .card-actions {
-    opacity: 0;
+    visibility: hidden;
   }
 
   &:hover .card-actions,
-  &:focus-within .card-actions {
-    opacity: 1;
+  &:focus-visible .card-actions,
+  &:has(:focus-visible) .card-actions {
+    visibility: visible;
   }
 `;
 
@@ -65,14 +87,13 @@ const Labels = styled.div`
   margin-bottom: 6px;
 `;
 
+// folga fixa à direita: cabe o deslize do título sem encostar nos botões do canto
 const TitleRow = styled.div`
-  display: flex;
-  align-items: flex-start;
-  padding-right: 52px;
+  position: relative;
+  padding-right: 58px;
 `;
 
 const Title = styled.div<{ $completed: boolean }>`
-  flex: 1;
   min-width: 0;
   font-size: ${fontSize.support}px;
   line-height: 1.4;
@@ -81,10 +102,13 @@ const Title = styled.div<{ $completed: boolean }>`
   white-space: pre-wrap;
 `;
 
+// sobre o começo do título (não ocupa espaço): o título é que desliza para abrir lugar
 const DoneToggle = styled.button<{ $completed: boolean }>`
-  flex-shrink: 0;
-  height: 18px;
-  margin-top: 1px;
+  position: absolute;
+  top: 2px;
+  left: 0;
+  width: 16px;
+  height: 16px;
   display: grid;
   place-items: center;
   padding: 0;
@@ -93,10 +117,8 @@ const DoneToggle = styled.button<{ $completed: boolean }>`
   border-radius: 50%;
   background: transparent;
   color: ${tones.success.solid};
-  font-size: 16px;
+  font-size: 15px;
   cursor: pointer;
-  /* sem animar a largura: o círculo já está no lugar quando o clique chega */
-  transition: opacity 0.12s ease;
 
   /* aberto: só o contorno do círculo */
   ${({ $completed }) =>
@@ -104,8 +126,9 @@ const DoneToggle = styled.button<{ $completed: boolean }>`
     css`
       &::before {
         content: '';
-        width: 14px;
-        height: 14px;
+        flex-shrink: 0;
+        width: 13px;
+        height: 13px;
         border-radius: 50%;
         border: 1.5px solid ${colors.textMuted};
       }
@@ -118,30 +141,30 @@ const DoneToggle = styled.button<{ $completed: boolean }>`
 
 const Actions = styled.div`
   position: absolute;
-  top: 6px;
-  right: 6px;
+  top: 5px;
+  right: 5px;
   display: flex;
   gap: 4px;
-  transition: opacity 0.12s ease;
 `;
 
+// botões redondos do canto, sem borda (como o lápis do Trello)
 const ActionButton = styled.button`
-  width: 24px;
-  height: 24px;
+  width: 26px;
+  height: 26px;
   display: grid;
   place-items: center;
   padding: 0;
-  border: 1px solid ${colors.border};
+  border: none;
   border-radius: 50%;
   background: ${colors.bgSubtle};
   color: ${colors.textMuted};
-  font-size: 12px;
+  font-size: 13px;
   cursor: pointer;
 
   &:hover,
   &:focus-visible {
     color: ${colors.textDark};
-    border-color: ${colors.borderStrong};
+    background: ${colors.bgMuted};
   }
 `;
 
@@ -257,7 +280,9 @@ export function CardTile({ card, labels, today, dragging, onOpen, onToggleComple
             {card.completed && <CheckCircleFilled aria-hidden />}
           </DoneToggle>
         </Hint>
-        <Title $completed={card.completed}>{card.title}</Title>
+        <Title className="card-title" $completed={card.completed}>
+          {card.title}
+        </Title>
       </TitleRow>
 
       <Actions className="card-actions">
