@@ -20,6 +20,7 @@ const DESCRIPTIONS: Record<string, string> = {
   intelligence: 'Atualizações das fontes oficiais. Desligado, a coleta diária também para.',
   reforma: 'Prazos e documentos da legislação. Desligado, a sincronização diária também para.',
   projects: 'Status report dos projetos.',
+  boards: 'Quadros Kanban com listas e cartões, no estilo do Trello.',
 };
 
 const Groups = styled.div`

@@ -20,7 +20,7 @@ from app.extensions import db
 SETTING = "modules.disabled"
 MAX_BODY_BYTES = 4 * 1024
 # a Visão Geral fica sempre ligada: não entra na lista (um "overview" salvo antes é ignorado)
-MODULE_KEYS = ("clients", "receipts", "das", "intelligence", "reforma", "projects")
+MODULE_KEYS = ("clients", "receipts", "das", "intelligence", "reforma", "projects", "boards")
 DISABLED_MESSAGE = "Módulo desativado em Ajustes > Módulos"
 
 # API de cada módulo; o mais específico primeiro (recebimentos e DAS ficam dentro de /api/clients)
@@ -31,6 +31,7 @@ _API_PREFIXES = (
     ("/api/intelligence", "intelligence"),
     ("/api/reforma", "reforma"),
     ("/api/projects", "projects"),
+    ("/api/boards", "boards"),
     ("/api/clients", "clients"),
 )
 

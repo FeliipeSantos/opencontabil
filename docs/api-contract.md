@@ -121,10 +121,10 @@ Serviços externos da instalação, em Ajustes > Integrações. O Assistente de 
 | Rota | Resposta |
 |---|---|
 | `GET /api/modules` | `{ disabled: [...] }`: módulos desligados em Ajustes > Módulos (vale para a instalação toda) |
-| `PUT /api/modules` | Corpo `{ "disabled": [...] }` com as chaves `clients`, `receipts`, `das`, `intelligence`, `reforma` e `projects`. Devolve o mesmo formato. `400 Módulo inválido` para outra chave. A Visão Geral fica sempre ligada |
+| `PUT /api/modules` | Corpo `{ "disabled": [...] }` com as chaves `clients`, `receipts`, `das`, `intelligence`, `reforma`, `projects` e `boards`. Devolve o mesmo formato. `400 Módulo inválido` para outra chave. A Visão Geral fica sempre ligada |
 
 - **Módulo desligado:** sai do menu e da Visão Geral; a tela mostra que está desativado; a API dele responde `403 Módulo desativado em Ajustes > Módulos`.
-- **APIs de cada módulo:** `receipts` (`/api/clients/receipts` e `/api/clients/service-types`), `das` (`/api/clients/das`), `intelligence`, `reforma`, `projects` e `clients` (`/api/clients`). Com Clientes desligado, a lista (`GET`) continua respondendo, porque Recebimentos e DAS a usam; só as alterações são bloqueadas.
+- **APIs de cada módulo:** `receipts` (`/api/clients/receipts` e `/api/clients/service-types`), `das` (`/api/clients/das`), `intelligence`, `reforma`, `projects`, `boards` e `clients` (`/api/clients`). Com Clientes desligado, a lista (`GET`) continua respondendo, porque Recebimentos e DAS a usam; só as alterações são bloqueadas.
 - **Coletas:** com Publicações ou Calendário desligado, `flask intel scheduled` e `flask reforma scheduled` não rodam a coleta diária. A coleta manual também fica bloqueada pela API.
 - **No banco:** `core_settings`, chave `modules.disabled`. Os dados dos módulos são mantidos.
 
@@ -145,6 +145,24 @@ Serviços externos da instalação, em Ajustes > Integrações. O Assistente de 
 - **Erro:** nada é gravado.
 - **No banco:** `projects_projects(id, name, data, position, created_at, updated_at, updated_by)`, com `updated_by` = usuário da sessão.
 - **Não existe:** `POST /api/projects` (salvar a lista inteira) responde `404`.
+
+### Quadros (Kanban): `/api/boards`
+
+Módulo Quadros, no grupo Controle: quadros no estilo do Trello, com listas e cartões. Cada quadro é salvo inteiro, como um documento.
+
+| Rota | Resposta |
+|---|---|
+| `GET /api/boards` | `[{ id, name, color, lists, cards, updatedAt }]` na ordem de criação (`lists` e `cards` são contagens) |
+| `GET /api/boards/:id` | O quadro completo. `404` se não existe |
+| `PUT /api/boards/:id` | Cria ou atualiza o quadro: `201`/`200 { id, result: "created" \| "updated", updatedAt }`. `400` para quadro inválido, nome vazio ou `id` diferente do endereço; `413` acima de 4 MB |
+| `DELETE /api/boards/:id` | Exclui o quadro e os cartões dele. `404` se não existe |
+
+- **Quadro:** `{ id, name, color, labels: [{ id, name, color }], lists: [{ id, title, cards: [Cartão] }], createdAt }`. Campos fora desse formato são recusados.
+- **Cartão:** `{ id, title, description, labelIds, due ("AAAA-MM-DD" ou null), dueDone, checklist: [{ id, text, done }], completed, archived, comments: [{ id, author, text, createdAt, editedAt }], activity: [{ id, author, text, createdAt }], createdAt }`. `activity` é o histórico escrito pela tela (criou, moveu, concluiu), até 200 eventos; até 500 comentários por cartão.
+- **Cores:** `blue`, `green`, `orange`, `purple`, `red` e `gray`.
+- **Limites:** nome até 120 caracteres; até 100 listas, 1000 cartões por lista, 30 etiquetas e 200 itens de checklist por cartão.
+- **Módulos:** a chave em Ajustes > Módulos é `boards`.
+- **No banco:** `boards_boards`, uma linha por quadro com o documento em `data`.
 
 ## 6. Publicações: `/api/intelligence`
 

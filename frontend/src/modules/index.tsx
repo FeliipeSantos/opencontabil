@@ -1,9 +1,12 @@
-import { AppstoreOutlined, AuditOutlined, CalendarOutlined, FileDoneOutlined, FileTextOutlined, ReadOutlined, SolutionOutlined, TeamOutlined, WalletOutlined } from '@ant-design/icons';
+import { AppstoreOutlined, AuditOutlined, CalendarOutlined, FileDoneOutlined, FileTextOutlined, ProjectOutlined, ReadOutlined, SolutionOutlined, TeamOutlined, WalletOutlined } from '@ant-design/icons';
+import { LayoutDashboard } from 'lucide-react';
 import type { ReactNode } from 'react';
 import type { RouteObject } from 'react-router-dom';
 
 import type { ModuleSearch } from '@/core/layout/search';
 
+import { BOARDS_PATH } from '@/modules/boards/paths';
+import { boardsRoutes } from '@/modules/boards/routes';
 import { CLIENTS_PATH } from '@/modules/clients/format';
 import { clientsRoutes } from '@/modules/clients/routes';
 import { clientsSearch } from '@/modules/clients/search';
@@ -48,6 +51,7 @@ export interface ModuleGroup {
 export const MODULE_GROUPS: ModuleGroup[] = [
   { key: 'inteligencia-contabil', label: 'Inteligência Contábil', icon: <AuditOutlined /> },
   { key: 'gestao-contabil', label: 'Gestão Contábil', icon: <SolutionOutlined /> },
+  { key: 'controle', label: 'Controle', icon: <ProjectOutlined /> },
 ];
 
 export const MODULES: ModuleDefinition[] = [
@@ -82,5 +86,14 @@ export const MODULES: ModuleDefinition[] = [
     search: reformaSearch,
     group: 'inteligencia-contabil',
   },
-  { key: 'projects', label: 'Portal de Projetos', icon: <FileTextOutlined />, path: '/projetos', routes: projectsRoutes, search: projectsSearch },
+  {
+    key: 'projects',
+    label: 'Portal de Projetos',
+    icon: <FileTextOutlined />,
+    path: '/projetos',
+    routes: projectsRoutes,
+    search: projectsSearch,
+    group: 'controle',
+  },
+  { key: 'boards', label: 'Quadros', icon: <LayoutDashboard size="1em" />, path: BOARDS_PATH, routes: boardsRoutes, group: 'controle' },
 ];
