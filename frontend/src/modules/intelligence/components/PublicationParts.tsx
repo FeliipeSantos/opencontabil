@@ -1,4 +1,4 @@
-import { StarFilled, StarOutlined } from '@ant-design/icons';
+import { CheckCircleFilled, CheckCircleOutlined, EyeInvisibleOutlined, StarFilled, StarOutlined } from '@ant-design/icons';
 import { App, Button, Tooltip } from 'antd';
 import { type MouseEvent, useState } from 'react';
 import styled from 'styled-components';
@@ -7,8 +7,8 @@ import { errorMessage, SessionExpiredError } from '@/core/api/client';
 import { StatusBadge } from '@/core/ui';
 import { intelligenceApi } from '@/modules/intelligence/api';
 import { useIntelligence } from '@/modules/intelligence/context';
-import { RELEVANCE, relevanceSteps } from '@/modules/intelligence/format';
-import type { Publication, Relevance } from '@/modules/intelligence/types';
+import { readStatusOf, RELEVANCE, relevanceSteps } from '@/modules/intelligence/format';
+import type { Publication, ReadStatus, Relevance } from '@/modules/intelligence/types';
 import { colors, radius, tones } from '@/theme';
 
 // o Tooltip precisa de um elemento DOM para ancorar
@@ -122,5 +122,129 @@ export function FavoriteButton({ publication, onChange, variant = 'icon' }: Favo
     <Tooltip title={label}>
       <FavButton $active={active} loading={saving} aria-label={label} aria-pressed={active} icon={icon} onClick={onClick} />
     </Tooltip>
+  );
+}
+
+// "✓ Marcar como lida" / "✓ Lida": mesmo formato do favorito, em verde
+const ReadTextButton = styled(FavTextButton)`
+  &&& {
+    color: ${({ $active }) => ($active ? tones.success.fg : colors.textMuted)};
+  }
+
+  &&&:hover,
+  &&&:focus-visible {
+    color: ${tones.success.fg};
+    background: ${tones.success.bg};
+  }
+`;
+
+const ReadIconButton = styled(FavButton)`
+  &&& {
+    color: ${({ $active }) => ($active ? tones.success.fg : colors.textSubtle)};
+    background: ${({ $active }) => ($active ? tones.success.bg : 'transparent')};
+    border-color: ${({ $active }) => ($active ? tones.success.border : colors.border)};
+  }
+
+  &&&:hover,
+  &&&:focus-visible {
+    color: ${tones.success.fg};
+    border-color: ${tones.success.border};
+    background: ${tones.success.bg};
+  }
+`;
+
+interface ReadButtonProps extends FavoriteButtonProps {
+  /** Same act from other sources, shown in the same row: changed together. */
+  related?: Publication[];
+}
+
+// muda a leitura da publicação e da mesma norma de outras fontes
+function useReadChange(publication: Publication, related: Publication[], onChange: (publication: Publication) => void) {
+  const { message } = App.useApp();
+  const [saving, setSaving] = useState(false);
+
+  async function change(next: ReadStatus | null) {
+    if (saving) return;
+    setSaving(true);
+    const all = [publication, ...related];
+    try {
+      if (next) await intelligenceApi.markRead(all.map((p) => p.id), next);
+      else await Promise.all(all.map((p) => intelligenceApi.markUnread(p.id)));
+      all.forEach((p) => onChange({ ...p, read: next !== null, readStatus: next }));
+    } catch (error) {
+      if (!(error instanceof SessionExpiredError)) message.error(`Não foi possível atualizar a leitura: ${errorMessage(error)}`);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return { saving, change };
+}
+
+const stop = (action: () => void) => (e: MouseEvent) => {
+  e.stopPropagation();
+  action();
+};
+
+/**
+ * Lida / não lida. Na lista, uma ignorada aparece como "Ignorada" e o clique a devolve às
+ * não lidas; no painel de detalhes (ícone) o clique numa ignorada a marca como lida.
+ */
+export function ReadButton({ publication, onChange, variant = 'icon', related = [] }: ReadButtonProps) {
+  const { saving, change } = useReadChange(publication, related, onChange);
+  const status = readStatusOf(publication);
+
+  if (variant === 'text') {
+    if (status === 'ignored') {
+      const label = 'Ignorada: clique para voltar às não lidas';
+      return (
+        <ReadTextButton type="text" size="small" $active={false} loading={saving} aria-label={label} title={label} icon={<EyeInvisibleOutlined />} onClick={stop(() => void change(null))}>
+          Ignorada
+        </ReadTextButton>
+      );
+    }
+    const active = status === 'read';
+    const label = active ? 'Marcar como não lida' : 'Marcar como lida';
+    return (
+      <ReadTextButton
+        type="text"
+        size="small"
+        $active={active}
+        loading={saving}
+        aria-label={label}
+        aria-pressed={active}
+        title={label}
+        icon={active ? <CheckCircleFilled /> : <CheckCircleOutlined />}
+        onClick={stop(() => void change(active ? null : 'read'))}
+      >
+        {active ? 'Lida' : 'Marcar como lida'}
+      </ReadTextButton>
+    );
+  }
+
+  const active = status === 'read';
+  const label = active ? 'Marcar como não lida' : 'Marcar como lida';
+  return (
+    <Tooltip title={label}>
+      <ReadIconButton
+        $active={active}
+        loading={saving}
+        aria-label={label}
+        aria-pressed={active}
+        icon={active ? <CheckCircleFilled /> : <CheckCircleOutlined />}
+        onClick={stop(() => void change(active ? null : 'read'))}
+      />
+    </Tooltip>
+  );
+}
+
+/** "Ignorar": not read, but out of the unread list (only on unread rows). */
+export function IgnoreButton({ publication, onChange, related = [] }: Omit<ReadButtonProps, 'variant'>) {
+  const { saving, change } = useReadChange(publication, related, onChange);
+  const label = 'Ignorar: tirar das não lidas sem marcar como lida';
+  return (
+    <FavTextButton type="text" size="small" $active={false} loading={saving} aria-label={label} title={label} icon={<EyeInvisibleOutlined />} onClick={stop(() => void change('ignored'))}>
+      Ignorar
+    </FavTextButton>
   );
 }

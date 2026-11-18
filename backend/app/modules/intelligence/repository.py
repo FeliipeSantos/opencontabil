@@ -285,6 +285,10 @@ def _row_to_publication(r: dict) -> dict:
         pub["classificationReason"] = json.loads(r["classification_reason"])
     if "favorite" in r:
         pub["favorite"] = bool(r["favorite"])
+    if "read_status" in r:
+        # ignorada conta como vista: sai das não lidas, mas guarda a diferença
+        pub["read"] = r["read_status"] is not None
+        pub["readStatus"] = r["read_status"]
     if r.get("favorited_at"):
         pub["favoritedAt"] = r["favorited_at"]
     return pub
@@ -350,10 +354,17 @@ def known_publication_keys() -> tuple[set[str], set[str]]:
     return {f"{r['source_id']}:{r['external_id']}" for r in rows}, {r["hash"] for r in rows if r["hash"]}
 
 
-def list_publications(filters: dict, limit: int, offset: int, user: str | None = None) -> dict:
-    """Filtered, paginated list {total, items} (filters already validated by the caller)."""
+# colunas por usuário (favorito e lida) de cada publicação da consulta
+_USER_COLUMNS = (
+    "SELECT p.*, (f.username IS NOT NULL) AS favorite, r.status AS read_status FROM intel_publications p "
+    "LEFT JOIN intel_favorites f ON f.publication_id = p.id AND f.username = :user "
+    "LEFT JOIN intel_reads r ON r.publication_id = p.id AND r.username = :user "
+)
+
+
+def _filter_sql(filters: dict, params: dict) -> str:
+    """WHERE clause of the publication filters; fills params (":user" is expected for "read")."""
     where = []
-    params: dict = {}
     subjects = filters.get("subjects") or []
     if subjects:
         names = []
@@ -383,27 +394,30 @@ def list_publications(filters: dict, limit: int, offset: int, user: str | None =
         where.append("p.search_text LIKE :search ESCAPE '\\'")
         escaped = normalize_for_match(filters["text"]).replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
         params["search"] = f"%{escaped}%"
-    where_sql = f"WHERE {' AND '.join(where)}" if where else ""
+    # lida ou não pelo usuário da sessão
+    # lida ou não pelo usuário da sessão ("no" deixa de fora também as ignoradas)
+    read = filters.get("read")
+    seen = "SELECT 1 FROM intel_reads rf WHERE rf.publication_id = p.id AND rf.username = :user"
+    if read == "no":
+        where.append(f"NOT EXISTS ({seen})")
+    elif read == "yes":
+        where.append(f"EXISTS ({seen} AND rf.status = 'read')")
+    elif read == "ignored":
+        where.append(f"EXISTS ({seen} AND rf.status = 'ignored')")
+    return f"WHERE {' AND '.join(where)}" if where else ""
+
+
+def list_publications(filters: dict, limit: int, offset: int, user: str | None = None) -> dict:
+    """Filtered, paginated list {total, items} (filters already validated by the caller)."""
+    params: dict = {"user": user}
+    where_sql = _filter_sql(filters, params)
     total = _row(f"SELECT COUNT(*) AS n FROM intel_publications p {where_sql}", **params)["n"]
-    rows = _rows(
-        "SELECT p.*, (f.username IS NOT NULL) AS favorite FROM intel_publications p "
-        "LEFT JOIN intel_favorites f ON f.publication_id = p.id AND f.username = :user "
-        f"{where_sql} ORDER BY {ORDER_BY} LIMIT :limit OFFSET :offset",
-        user=user,
-        limit=limit,
-        offset=offset,
-        **params,
-    )
+    rows = _rows(f"{_USER_COLUMNS}{where_sql} ORDER BY {ORDER_BY} LIMIT :limit OFFSET :offset", limit=limit, offset=offset, **params)
     return {"total": total, "items": [_row_to_publication(r) for r in rows]}
 
 
 def get_publication(publication_id: str, user: str | None = None) -> dict | None:
-    row = _row(
-        "SELECT p.*, (f.username IS NOT NULL) AS favorite FROM intel_publications p "
-        "LEFT JOIN intel_favorites f ON f.publication_id = p.id AND f.username = :user WHERE p.id = :id",
-        user=user,
-        id=publication_id,
-    )
+    row = _row(f"{_USER_COLUMNS}WHERE p.id = :id", user=user, id=publication_id)
     return _row_to_publication(row) if row else None
 
 
@@ -470,9 +484,14 @@ def count_by_source() -> dict[str, int]:
     return {r["source_id"]: r["n"] for r in _rows("SELECT source_id, COUNT(*) AS n FROM intel_publications GROUP BY source_id")}
 
 
-def totals(recent_from: str) -> dict:
+def totals(recent_from: str, user: str | None = None) -> dict:
     reform = ", ".join(f"'{s}'" for s in REFORM_SUBJECTS)
     return {
+        "unread": _row(
+            "SELECT COUNT(*) AS n FROM intel_publications p "
+            "WHERE NOT EXISTS (SELECT 1 FROM intel_reads r WHERE r.publication_id = p.id AND r.username = :user)",
+            user=user,
+        )["n"],
         "publications": _row("SELECT COUNT(*) AS n FROM intel_publications")["n"],
         "critical": _row("SELECT COUNT(*) AS n FROM intel_publications WHERE relevance = 'critica'")["n"],
         "recent": _row("SELECT COUNT(*) AS n FROM intel_publications WHERE published_at >= :since", since=recent_from)["n"],
@@ -525,8 +544,10 @@ def reclassify_publications(classify_fn) -> dict:
 def list_favorites(user: str) -> list[dict]:
     """User favorites, newest first."""
     rows = _rows(
-        "SELECT p.*, 1 AS favorite, f.created_at AS favorited_at FROM intel_favorites f "
-        "JOIN intel_publications p ON p.id = f.publication_id WHERE f.username = :user ORDER BY f.created_at DESC",
+        "SELECT p.*, 1 AS favorite, f.created_at AS favorited_at, r.status AS read_status FROM intel_favorites f "
+        "JOIN intel_publications p ON p.id = f.publication_id "
+        "LEFT JOIN intel_reads r ON r.publication_id = p.id AND r.username = :user "
+        "WHERE f.username = :user ORDER BY f.created_at DESC",
         user=user,
     )
     return [_row_to_publication(r) for r in rows]
@@ -547,5 +568,55 @@ def add_favorite(user: str, publication_id: str) -> str:
 def remove_favorite(user: str, publication_id: str) -> None:
     db.session.execute(
         text("DELETE FROM intel_favorites WHERE username = :user AND publication_id = :id"), {"user": user, "id": publication_id}
+    )
+    db.session.commit()
+
+
+# ---------------------------------------------------------------------------
+# Lidas (por usuário)
+# ---------------------------------------------------------------------------
+
+
+READ_STATUSES = ("read", "ignored")
+
+
+def mark_read(user: str, publication_ids: list[str], status: str = "read") -> int:
+    """Marks the existing publications among the ids as read or ignored (replacing the other
+    state); returns how many changed (commits)."""
+    marked = 0
+    at = utc_now_iso()
+    for publication_id in dict.fromkeys(publication_ids):
+        result = db.session.execute(
+            text(
+                "INSERT INTO intel_reads (username, publication_id, read_at, status) "
+                "SELECT :user, id, :at, :status FROM intel_publications WHERE id = :id "
+                "ON CONFLICT (username, publication_id) DO UPDATE SET status = excluded.status, read_at = excluded.read_at "
+                "WHERE intel_reads.status <> excluded.status"
+            ),
+            {"user": user, "id": publication_id, "at": at, "status": status},
+        )
+        marked += result.rowcount
+    db.session.commit()
+    return marked
+
+
+def mark_all_read(user: str, filters: dict) -> int:
+    """Marks every publication matching the filters as read; returns how many were new (commits)."""
+    params: dict = {"user": user, "at": utc_now_iso()}
+    where_sql = _filter_sql(filters, params)
+    result = db.session.execute(
+        text(
+            "INSERT OR IGNORE INTO intel_reads (username, publication_id, read_at) "
+            f"SELECT :user, p.id, :at FROM intel_publications p {where_sql}"
+        ),
+        params,
+    )
+    db.session.commit()
+    return result.rowcount
+
+
+def mark_unread(user: str, publication_id: str) -> None:
+    db.session.execute(
+        text("DELETE FROM intel_reads WHERE username = :user AND publication_id = :id"), {"user": user, "id": publication_id}
     )
     db.session.commit()

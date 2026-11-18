@@ -11,8 +11,11 @@ export interface IntelligenceContextValue {
   reloadCatalog: () => Promise<void>;
   /** Changes whenever the open view must reload (a collection finished). */
   refreshKey: number;
-  /** Opens the detail panel; onChange receives the publication when its favorite changes. */
-  openDetail: (publication: Publication, onChange?: (publication: Publication) => void) => void;
+  /**
+   * Opens the detail panel and marks the publication (and `related`, the same act from other
+   * sources) as read; onChange receives each publication whose favorite or read state changes.
+   */
+  openDetail: (publication: Publication, onChange?: (publication: Publication) => void, related?: Publication[]) => void;
 }
 
 export const IntelligenceContext = createContext<IntelligenceContextValue | null>(null);

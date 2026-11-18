@@ -66,6 +66,7 @@ def _parse_filters(args) -> tuple[str | None, dict]:
     date_to = args.get("to") or None
     run_id = args.get("run") or None
     search = (args.get("q") or "").strip()
+    read = args.get("read") or None
 
     if any(s not in SUBJECT_IDS for s in subjects):
         return "Assunto inválido", {}
@@ -77,6 +78,8 @@ def _parse_filters(args) -> tuple[str | None, dict]:
         return "Período inválido", {}
     if run_id and not repository.get_run(run_id):
         return "Execução não encontrada", {}
+    if read and read not in ("yes", "no", "ignored"):
+        return "Filtro de leitura inválido", {}
     return None, {
         "subjects": subjects,
         "relevance": relevance,
@@ -85,6 +88,7 @@ def _parse_filters(args) -> tuple[str | None, dict]:
         "to": date_to,
         "runId": run_id,
         "text": search,
+        "read": read,
     }
 
 
@@ -139,7 +143,7 @@ def summary():
     counts = repository.count_by_subject()
     return json_response(
         {
-            "totals": repository.totals(recent_from),
+            "totals": repository.totals(recent_from, g.user),
             "recentDays": RECENT_DAYS,
             "byCategory": [{"id": s["id"], "name": s["name"], "count": counts.get(s["id"], 0)} for s in SUBJECTS],
             "recentItems": repository.list_publications({"from": recent_from}, limit=6, offset=0, user=g.user)["items"],
@@ -284,6 +288,45 @@ def remove_favorite(publication_id: str):
         return json_error(404, NOT_FOUND)
     repository.remove_favorite(g.user, publication_id)
     return json_response({"publicationId": publication_id, "favorite": False})
+
+
+# no máximo uma página da lista por pedido; "todas" usa /reads/all com os filtros
+MAX_READ_IDS = 200
+
+
+@bp.post("/reads")
+def mark_read():
+    body = _read_json_body()
+    ids = body.get("publicationIds")
+    if (
+        not isinstance(ids, list)
+        or not ids
+        or len(ids) > MAX_READ_IDS
+        or not all(isinstance(i, str) and ID_PATTERN.fullmatch(i) for i in ids)
+    ):
+        return json_error(400, "Informe de 1 a 200 publicações")
+    # "ignored": não lida, mas o usuário não quer vê-la entre as não lidas
+    status = body.get("status", "read")
+    if status not in repository.READ_STATUSES:
+        return json_error(400, "Situação de leitura inválida")
+    return json_response({"marked": repository.mark_read(g.user, ids, status)})
+
+
+@bp.post("/reads/all")
+def mark_all_read():
+    # mesmos filtros da lista (endereço): marca tudo o que a lista mostra, não só a página carregada
+    error, filters = _parse_filters(request.args)
+    if error:
+        return json_error(400, error)
+    return json_response({"marked": repository.mark_all_read(g.user, filters)})
+
+
+@bp.delete("/reads/<publication_id>")
+def mark_unread(publication_id: str):
+    if not ID_PATTERN.fullmatch(publication_id):
+        return json_error(404, NOT_FOUND)
+    repository.mark_unread(g.user, publication_id)
+    return json_response({"publicationId": publication_id, "read": False})
 
 
 @bp.errorhandler(_BadRequest)

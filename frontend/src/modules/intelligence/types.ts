@@ -32,7 +32,13 @@ export interface Publication {
   classificationReason?: ClassificationReason;
   favorite?: boolean;
   favoritedAt?: string;
+  /** Seen by the session user: read (or opened) or ignored. */
+  read?: boolean;
+  readStatus?: ReadStatus | null;
 }
+
+/** "ignored": not read, but out of the unread list. */
+export type ReadStatus = 'read' | 'ignored';
 
 /** A provision of the act that states a concrete value (amount, percentage, deadline, date). */
 export interface KeyPoint {
@@ -130,7 +136,7 @@ export interface ScheduleInfo {
 }
 
 export interface Summary extends ScheduleInfo {
-  totals: { publications: number; critical: number; recent: number; reform: number };
+  totals: { publications: number; critical: number; recent: number; reform: number; unread: number };
   recentDays: number;
   byCategory: { id: string; name: string; count: number }[];
   recentItems: Publication[];
@@ -157,4 +163,6 @@ export interface PublicationFilters {
   to: string;
   q: string;
   run: string;
+  /** "no": only unread, "yes": only read. */
+  read: string;
 }

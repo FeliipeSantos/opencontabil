@@ -99,6 +99,18 @@ class Favorite(db.Model):
     created_at: Mapped[str] = mapped_column(Text, nullable=False)
 
 
+class Read(db.Model):
+    """Publication the user marked as read (or opened) or chose to ignore."""
+
+    __tablename__ = "intel_reads"
+
+    username: Mapped[str] = mapped_column(Text, ForeignKey("core_users.username", ondelete="CASCADE", onupdate="CASCADE"), primary_key=True)
+    publication_id: Mapped[str] = mapped_column(Text, ForeignKey("intel_publications.id", ondelete="CASCADE"), primary_key=True)
+    read_at: Mapped[str] = mapped_column(Text, nullable=False)
+    # "read" ou "ignored" (não lida, mas fora das não lidas)
+    status: Mapped[str] = mapped_column(Text, nullable=False, server_default="read")
+
+
 class PublicationText(db.Model):
     """Full official text of a publication, fetched after collection (DOU page of the act).
 

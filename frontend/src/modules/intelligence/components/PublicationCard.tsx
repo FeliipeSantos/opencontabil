@@ -4,12 +4,13 @@ import { Fragment, type ReactNode, useMemo } from 'react';
 import styled, { css } from 'styled-components';
 
 import { EmptyState, IconCircle } from '@/core/ui';
-import { FavoriteButton, RelevanceTag } from '@/modules/intelligence/components/PublicationParts';
+import { FavoriteButton, IgnoreButton, ReadButton, RelevanceTag } from '@/modules/intelligence/components/PublicationParts';
 import { useIntelligence } from '@/modules/intelligence/context';
 import {
   type ActIconKind,
   actIconKind,
   formatPublished,
+  readStatusOf,
   groupSameAct,
   type PublicationGroup,
   REFORM_SUBJECTS,
@@ -17,8 +18,8 @@ import {
   RELEVANCE_ICON_TONE,
   safeOfficialUrl,
 } from '@/modules/intelligence/format';
-import type { Publication } from '@/modules/intelligence/types';
-import { colors, fontSize, type IconTone, iconTones, radius, shadows } from '@/theme';
+import type { Publication, ReadStatus } from '@/modules/intelligence/types';
+import { colors, fontSize, type IconTone, iconTones, radius, shadows, tones } from '@/theme';
 
 const ACT_ICONS: Record<ActIconKind, ReactNode> = {
   law: <AuditOutlined />,
@@ -34,7 +35,8 @@ const ListBox = styled.div`
 `;
 
 // linha arredondada: ícone por tipo de ato (cor = relevância), textos e seta
-const Row = styled.div<{ $raised: boolean }>`
+// tom do card pela leitura: não lida em branco, lida em verde suave, ignorada em cinza tracejado
+const Row = styled.div<{ $raised: boolean; $read: ReadStatus | null }>`
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
@@ -46,11 +48,30 @@ const Row = styled.div<{ $raised: boolean }>`
   cursor: pointer;
   transition:
     border-color 0.15s ease,
-    box-shadow 0.15s ease;
+    box-shadow 0.15s ease,
+    opacity 0.15s ease;
   ${({ $raised }) =>
     $raised &&
     css`
       box-shadow: ${shadows.sm};
+    `}
+  ${({ $read }) =>
+    $read === 'read' &&
+    css`
+      background: ${tones.success.bg};
+      border-color: ${tones.success.border};
+    `}
+  ${({ $read }) =>
+    $read === 'ignored' &&
+    css`
+      background: ${colors.bgMuted};
+      border-style: dashed;
+      border-color: ${colors.borderStrong};
+      opacity: 0.75;
+
+      &:hover {
+        opacity: 1;
+      }
     `}
 
   &:hover {
@@ -77,16 +98,27 @@ const Body = styled.div`
   min-width: 0;
 `;
 
-const Title = styled.div`
+// lida: título sem negrito e mais claro; não lida: negrito com ponto azul antes
+const Title = styled.div<{ $read: boolean }>`
   font-size: 14px;
-  font-weight: 600;
+  font-weight: ${({ $read }) => ($read ? 500 : 600)};
   line-height: 1.35;
-  color: ${colors.textDark};
+  color: ${({ $read }) => ($read ? colors.textMuted : colors.textDark)};
   overflow-wrap: anywhere;
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
+`;
+
+const UnreadDot = styled.span`
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-right: 7px;
+  border-radius: 50%;
+  background: ${colors.blue};
+  vertical-align: 1px;
 `;
 
 const Excerpt = styled.p<{ $rows: number }>`
@@ -182,17 +214,20 @@ export function PublicationItem({ group, excerptRows, raised, onChange }: Public
   const { sourceName, subjectName, openDetail } = useIntelligence();
   const { primary: publication, others } = group;
   const href = safeOfficialUrl(publication.url);
-  const open = () => openDetail(publication, onChange);
+  const open = () => openDetail(publication, onChange, others);
   const relevance = RELEVANCE[publication.relevance];
   const [firstSubject, ...moreSubjects] = publication.subjects;
 
   return (
-    <Row role="button" tabIndex={0} $raised={raised} onClick={open} onKeyDown={(e) => e.key === 'Enter' && open()}>
+    <Row role="button" tabIndex={0} $raised={raised} $read={readStatusOf(publication)} onClick={open} onKeyDown={(e) => e.key === 'Enter' && open()}>
       <IconCircle $tone={RELEVANCE_ICON_TONE[publication.relevance] ?? 'gray'} $size={44} aria-hidden title={relevance ? `Relevância ${relevance.label}` : undefined}>
         {ACT_ICONS[actIconKind(publication)]}
       </IconCircle>
       <Body>
-        <Title>{publication.title}</Title>
+        <Title $read={Boolean(publication.read)}>
+          {!publication.read && <UnreadDot role="img" aria-label="Não lida" title="Não lida" />}
+          {publication.title}
+        </Title>
         {publication.excerpt && <Excerpt $rows={excerptRows}>{publication.excerpt}</Excerpt>}
         <Meta>
           <Tooltip title={publication.publishedTime ? 'Data e hora de publicação na fonte oficial' : 'A fonte informa apenas a data'}>
@@ -240,6 +275,8 @@ export function PublicationItem({ group, excerptRows, raised, onChange }: Public
             </OfficialLink>
           )}
           <FavoriteButton publication={publication} onChange={onChange} variant="text" />
+          <ReadButton publication={publication} related={others} onChange={onChange} variant="text" />
+          {!publication.read && <IgnoreButton publication={publication} related={others} onChange={onChange} />}
         </Meta>
       </Body>
       <Chevron className="publication-chevron" aria-hidden />

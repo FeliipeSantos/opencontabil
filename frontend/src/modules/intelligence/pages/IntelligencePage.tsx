@@ -106,13 +106,27 @@ function ModuleContent({ tab, catalog, reloadCatalog }: { tab: IntelligenceTab; 
   const [detail, setDetail] = useState<Publication | null>(null);
   const detailListener = useRef<((publication: Publication) => void) | undefined>(undefined);
 
+  // abrir é ler: marca a publicação (e a mesma norma de outras fontes) como lida, sem bloquear o painel
+  const markOpened = useCallback((publication: Publication, listener?: (p: Publication) => void, related: Publication[] = []) => {
+    const unread = [publication, ...related].filter((p) => !p.read);
+    if (!unread.length) return;
+    intelligenceApi
+      .markRead(unread.map((p) => p.id))
+      .then(() => {
+        setDetail((open) => (open?.id === publication.id ? { ...open, read: true } : open));
+        unread.forEach((p) => listener?.({ ...p, read: true }));
+      })
+      .catch(() => undefined);
+  }, []);
+
   // publicação escolhida na busca global: abre o painel de detalhes e limpa o estado da rota
   useEffect(() => {
     if (!isOpenPublicationState(location.state)) return;
     detailListener.current = undefined;
     setDetail(location.state.openPublication);
+    markOpened(location.state.openPublication);
     navigate({ pathname: location.pathname, search: location.search }, { replace: true, state: null });
-  }, [location.state, location.pathname, location.search, navigate]);
+  }, [location.state, location.pathname, location.search, navigate, markOpened]);
 
   const sourceName = useCallback((id: string) => catalog.sources.find((s) => s.id === id)?.name ?? id, [catalog.sources]);
   const subjectName = useCallback((id: string) => catalog.subjects.find((s) => s.id === id)?.name ?? id, [catalog.subjects]);
@@ -134,12 +148,13 @@ function ModuleContent({ tab, catalog, reloadCatalog }: { tab: IntelligenceTab; 
       subjectName,
       reloadCatalog: async () => reloadCatalog(),
       refreshKey,
-      openDetail: (publication, onChange) => {
+      openDetail: (publication, onChange, related) => {
         detailListener.current = onChange;
         setDetail(publication);
+        markOpened(publication, onChange, related);
       },
     }),
-    [catalog, sourceName, subjectName, reloadCatalog, refreshKey],
+    [catalog, sourceName, subjectName, reloadCatalog, refreshKey, markOpened],
   );
 
   function changeFromDetail(publication: Publication) {

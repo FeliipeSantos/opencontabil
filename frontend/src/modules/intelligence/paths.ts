@@ -29,7 +29,7 @@ export function legacyTabPath(tab: string | undefined, search: string): string {
   return known ? `${tabPath(known.key)}${search}` : PUBLICATIONS_BASE;
 }
 
-export const FILTER_KEYS: (keyof PublicationFilters)[] = ['subject', 'source', 'relevance', 'from', 'to', 'q', 'run'];
+export const FILTER_KEYS: (keyof PublicationFilters)[] = ['subject', 'source', 'relevance', 'from', 'to', 'q', 'run', 'read'];
 
 /** Address of the publication list with the given filters (and the run label, for the banner). */
 export function publicationsPath(filters: Partial<PublicationFilters>, runLabel?: string): string {

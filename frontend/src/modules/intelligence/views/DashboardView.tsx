@@ -71,7 +71,7 @@ function DashboardContent({ summary: data, critical, onChange }: { summary: Summ
           icon={<AuditOutlined />}
           label="Total de Atualizações"
           value={totals.publications}
-          hint="todas as fontes"
+          hint={totals.unread === 0 ? 'todas lidas' : totals.unread === 1 ? '1 não lida' : `${totals.unread} não lidas`}
           ariaLabel="Ver todas as publicações"
           onClick={() => navigate(publicationsPath({}))}
         />

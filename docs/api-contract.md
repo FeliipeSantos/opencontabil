@@ -165,14 +165,14 @@ Fonte que entra no catálogo depois vem ativada. As escolhas do usuário para as
 
 **Filtros de `/publications`:**
 - **`subject`:** um id ou vários separados por vírgula (qualquer um deles).
-- **Outros:** `relevance` (`critica`, `alta`, `media`, `baixa`), `source`, `from` e `to` (`AAAA-MM-DD`), `run` (id da execução) e `q` (texto, sem diferenciar acentos nem maiúsculas).
+- **Outros:** `relevance` (`critica`, `alta`, `media`, `baixa`), `source`, `from` e `to` (`AAAA-MM-DD`), `run` (id da execução), `q` (texto, sem diferenciar acentos nem maiúsculas) e `read` (`no`: só as não lidas pelo usuário da sessão, sem as ignoradas; `yes`: só as lidas; `ignored`: só as ignoradas).
 - **Paginação:** `limit` (1 a 200, padrão 50) e `offset`.
 - **Ordem:** mais recentes primeiro, por `publishedAt`, `publishedTime` e `collectedAt`.
 - **Sem data de publicação:** o item fica fora do filtro `from` e dentro do `to`.
-- **Erros (`400`):** `Assunto inválido`, `Relevância inválida`, `Fonte inválida`, `Período inválido` ou `Execução não encontrada`.
+- **Erros (`400`):** `Assunto inválido`, `Relevância inválida`, `Fonte inválida`, `Período inválido`, `Execução não encontrada` ou `Filtro de leitura inválido`.
 
 **Publicação:**
-- **Campos:** `{ id, sourceId, externalId, hash, title, url, publishedAt, publishedTime, excerpt, actType, organ, subjects, relevance, normType, effectiveDate, collectedAt, runId, favorite }`.
+- **Campos:** `{ id, sourceId, externalId, hash, title, url, publishedAt, publishedTime, excerpt, actType, organ, subjects, relevance, normType, effectiveDate, collectedAt, runId, favorite, read }`. `favorite`, `read` e `readStatus` valem para o usuário da sessão: `read` é `true` para lidas e ignoradas, e `readStatus` é `"read"`, `"ignored"` ou `null`.
 - **`normType`:** `"Projeto de lei"`, `"Comunicado informativo"`, `"Documento técnico"` (Notas Técnicas: leiaute e regras de validação, não são normas), `"Norma vigente"`, `"Norma com vigência futura"` ou `"Norma publicada (vigência não identificada no trecho)"`.
 - **Classificação:** quando existe, inclui `classificationReason: { actType, actLabel, weight, reformBonus, reformSubjects, score, subjects: [{ id, via: "source" | "keywords", terms }] }`.
 
@@ -196,6 +196,18 @@ Fonte que entra no catálogo depois vem ativada. As escolhas do usuário para as
 | `GET /favorites` | Publicações favoritas do usuário da sessão, com `favoritedAt`, das mais recentes para as mais antigas |
 | `POST /favorites` | Corpo `{ "publicationId" }`. `201` na primeira vez, `200` se já era favorita: `{ publicationId, favorite: true }`. `404` se a publicação não existe |
 | `DELETE /favorites/:id` | `200 { publicationId, favorite: false }` (idempotente) |
+
+### Lidas (por usuário)
+
+| Rota | Resposta |
+|---|---|
+| `POST /reads` | Corpo `{ "publicationIds": [...], "status"?: "read" \| "ignored" }` (1 a 200; padrão `read`). Marca as que existem, trocando a situação anterior: `200 { marked }` (quantas mudaram). Ignorada: não lida, mas fora das não lidas |
+| `POST /reads/all` | Marca como lidas todas as publicações dos filtros de `/publications` passados no endereço (não só a página carregada): `200 { marked }`. As ignoradas continuam ignoradas |
+| `DELETE /reads/:id` | `200 { publicationId, read: false }` (idempotente) |
+
+- **Ao abrir:** a tela marca como lida a publicação aberta no painel de detalhes (e a mesma norma vinda de outras fontes, quando aparece agrupada).
+- **`/summary`:** `totals.unread` conta as publicações ainda não lidas pelo usuário.
+- **No banco:** `intel_reads`, uma linha por usuário e publicação, com `status` `read` ou `ignored`; sai junto com a publicação ou o usuário.
 
 ### Coletas
 

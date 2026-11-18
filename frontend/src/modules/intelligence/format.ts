@@ -1,5 +1,5 @@
 /** Labels and formatting of the Publicações screens (same texts as before). */
-import type { Publication, Relevance, Run, RunStatus, ScheduleInfo } from '@/modules/intelligence/types';
+import type { Publication, ReadStatus, Relevance, Run, RunStatus, ScheduleInfo } from '@/modules/intelligence/types';
 import type { IconTone, Tone } from '@/theme';
 
 /** Relevance levels on the shared semantic scale (Baixa is neutral grey). */
@@ -241,4 +241,9 @@ export function resultCountText(total: number, loaded: number, shownItems: numbe
   if (joined <= 0) return base;
   const items = `${shownItems} ${shownItems === 1 ? 'item' : 'itens'}`;
   return `${base}, exibidas em ${items}: ${joined} ${joined === 1 ? 'é a mesma norma publicada' : 'são a mesma norma publicada'} em outra fonte`;
+}
+
+/** Read state of the publication for the session user (null: unread). */
+export function readStatusOf(publication: Publication): ReadStatus | null {
+  return publication.readStatus ?? (publication.read ? 'read' : null);
 }

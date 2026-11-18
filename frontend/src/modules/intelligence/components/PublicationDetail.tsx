@@ -5,7 +5,7 @@ import styled, { createGlobalStyle } from 'styled-components';
 import { Chip } from '@/core/ui';
 import { intelligenceApi } from '@/modules/intelligence/api';
 import { AiSummaryTab } from '@/modules/intelligence/components/AiSummaryTab';
-import { FavoriteButton, RelevanceBadge } from '@/modules/intelligence/components/PublicationParts';
+import { FavoriteButton, ReadButton, RelevanceBadge } from '@/modules/intelligence/components/PublicationParts';
 import { useIntelligence } from '@/modules/intelligence/context';
 import { formatDate, formatDateTime, formatPublished, RELEVANCE, relevanceSteps, safeOfficialUrl } from '@/modules/intelligence/format';
 import { splitHighlights, summarizePublication } from '@/modules/intelligence/summary';
@@ -487,6 +487,7 @@ export function PublicationDetail({ publication, onClose, onChange }: Publicatio
                   </Button>
                 )}
                 <FavoriteButton publication={publication} onChange={onChange} />
+                <ReadButton publication={publication} onChange={onChange} />
               </Flex>
               <Disclaimer>Conteúdo reproduzido da fonte oficial. Não constitui parecer jurídico ou contábil.</Disclaimer>
             </Flex>

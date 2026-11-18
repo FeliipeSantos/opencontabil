@@ -1,11 +1,11 @@
-import { FilterOutlined, SearchOutlined } from '@ant-design/icons';
-import { Alert, Badge, Button, DatePicker, Flex, Form, Input, Segmented, Select, Typography } from 'antd';
+import { CheckOutlined, EyeInvisibleOutlined, FilterOutlined, SearchOutlined } from '@ant-design/icons';
+import { Alert, App, Badge, Button, DatePicker, Flex, Form, Input, Popconfirm, Segmented, Select, Typography } from 'antd';
 import dayjs from 'dayjs';
 import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import styled from 'styled-components';
 
-import { errorMessage } from '@/core/api/client';
+import { errorMessage, SessionExpiredError } from '@/core/api/client';
 import { useCharLimit } from '@/core/hooks/useCharLimit';
 import { useLoad } from '@/core/hooks/useLoad';
 import { ErrorState, FilterPanel, LoadingState, Toolbar, ToolbarSpacer } from '@/core/ui';
@@ -86,6 +86,8 @@ const SegmentedScroll = styled.div`
 
 export function PublicationsView() {
   const { sources, subjects, refreshKey } = useIntelligence();
+  const { message } = App.useApp();
+  const [markingAll, setMarkingAll] = useState(false);
   const [params, setParams] = useSearchParams();
   const filters = useMemo(() => readFilters(params), [params]);
   const runLabel = params.get('runLabel');
@@ -134,10 +136,26 @@ export function PublicationsView() {
     }
   }
 
+  // tudo o que a lista mostra com os filtros atuais, não só a página carregada
+  async function markAllRead() {
+    setMarkingAll(true);
+    try {
+      const { marked } = await intelligenceApi.markAllRead(filters);
+      message.success(marked === 1 ? '1 publicação marcada como lida.' : `${marked} publicações marcadas como lidas.`);
+      state.reload();
+    } catch (error) {
+      if (!(error instanceof SessionExpiredError)) message.error(`Não foi possível marcar como lidas: ${errorMessage(error)}`);
+    } finally {
+      setMarkingAll(false);
+    }
+  }
+
   const replaceItem = (publication: Publication) =>
     state.setData((page) => page && { ...page, items: page.items.map((p) => (p.id === publication.id ? publication : p)) });
 
   const hasFilters = FILTER_KEYS.some((key) => filters[key]);
+  // filtro rápido de leitura: parâmetro "read=no" do endereço
+  const unreadOnly = filters.read === 'no';
   const advancedCount = ADVANCED_KEYS.filter((key) => filters[key]).length;
   const dateValue = (value: string) => (value ? dayjs(value, ISO) : null);
   const page = state.data;
@@ -162,12 +180,35 @@ export function PublicationsView() {
             aria-label="Filtrar por relevância"
           />
         </SegmentedScroll>
+        <Button
+          type={unreadOnly ? 'primary' : 'default'}
+          ghost={unreadOnly}
+          icon={<EyeInvisibleOutlined />}
+          aria-pressed={unreadOnly}
+          onClick={() => setFilter('read', unreadOnly ? '' : 'no')}
+        >
+          Só não lidas
+        </Button>
         <Button icon={<FilterOutlined />} aria-expanded={showAdvanced} onClick={() => setShowAdvanced((open) => !open)}>
           Mais filtros
           {advancedCount > 0 && <CountBadge count={advancedCount} color={colors.blue} size="small" />}
         </Button>
         <ToolbarSpacer />
         {hasFilters && <Button onClick={clearFilters}>Limpar filtros</Button>}
+        {page && page.total > 0 && filters.read !== 'yes' && (
+          <Popconfirm
+            title="Marcar todas como lidas?"
+            description={page.total === 1 ? 'A publicação desta lista fica como lida.' : `As ${page.total} publicações desta lista ficam como lidas.`}
+            placement="bottomRight"
+            okText="Marcar como lidas"
+            cancelText="Cancelar"
+            onConfirm={() => markAllRead()}
+          >
+            <Button icon={<CheckOutlined />} loading={markingAll}>
+              Marcar todas como lidas
+            </Button>
+          </Popconfirm>
+        )}
       </ToolbarCard>
 
       {showAdvanced && (
@@ -229,7 +270,13 @@ export function PublicationsView() {
             items={page.items}
             onChange={replaceItem}
             groupSources
-            emptyText={hasFilters ? 'Nenhuma publicação corresponde aos filtros.' : 'Nenhuma publicação coletada ainda. Use "Atualizar agora" ou aguarde a coleta automática.'}
+            emptyText={
+              unreadOnly
+                ? 'Tudo lido: nenhuma publicação não lida com estes filtros.'
+                : hasFilters
+                  ? 'Nenhuma publicação corresponde aos filtros.'
+                  : 'Nenhuma publicação coletada ainda. Use "Atualizar agora" ou aguarde a coleta automática.'
+            }
           />
           {page.total > page.items.length && (
             <Flex justify="center">

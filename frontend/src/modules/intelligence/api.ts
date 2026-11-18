@@ -4,6 +4,7 @@ import type {
   PublicationDetailData,
   PublicationFilters,
   PublicationPage,
+  ReadStatus,
   Run,
   RunState,
   Settings,
@@ -41,4 +42,9 @@ export const intelligenceApi = {
   favorites: () => apiRequest<Publication[]>(`${BASE}/favorites`),
   addFavorite: (publicationId: string) => apiRequest(`${BASE}/favorites`, { method: 'POST', body: { publicationId } }),
   removeFavorite: (publicationId: string) => apiRequest(`${BASE}/favorites/${encodeURIComponent(publicationId)}`, { method: 'DELETE' }),
+  markRead: (publicationIds: string[], status: ReadStatus = 'read') =>
+    apiRequest<{ marked: number }>(`${BASE}/reads`, { method: 'POST', body: { publicationIds, status } }),
+  /** Marks everything the list shows with these filters (not only the loaded page). */
+  markAllRead: (filters: Partial<PublicationFilters>) => apiRequest<{ marked: number }>(`${BASE}/reads/all?${query(filters)}`, { method: 'POST' }),
+  markUnread: (publicationId: string) => apiRequest(`${BASE}/reads/${encodeURIComponent(publicationId)}`, { method: 'DELETE' }),
 };
